@@ -137,9 +137,10 @@ function saveVoucher(body){
     const items = body.items || [];
     // 民國日期加 ' 前綴強制存為文字，避免 Sheet 誤判成西元 115 年
     const roc = body.rocDate ? "'" + body.rocDate : '';
+    const subject = String(body.subject||'').trim(); // 一張單一個科目
     const rows = items.map((it,i)=>([
       no, i+1, body.date||'', roc,
-      it.subject||'', it.memo||'', Number(it.amount)||0,
+      it.subject||subject, it.memo||'', Number(it.amount)||0,
       body.payee||'', body.applicant||'', Number(body.total)||0, now, ''
     ]));
     if(rows.length){
@@ -169,21 +170,32 @@ function buildMonthlyReport_(month){
   const map = getSubjectMap_();
   const last = data.getLastRow();
 
-  const rows = [];
+  // 同一張單（流水號）同一科目的多列明細，併成月報一列：
+  // 摘要用「、」串接，金額寫成 =a+b+c 公式（比照會計現行格式）
+  const groups = {};
+  const order = [];
   if(last >= 2){
     data.getRange(2,1,last-1,HEADERS.length).getValues().forEach(r=>{
       const no = String(r[0]);
       if(no.indexOf(month + '-') !== 0) return;
-      rows.push({
-        seq: parseInt(no.split('-')[1],10) || 0,
-        line: Number(r[1]) || 0,
-        rocDate: String(r[3]||'').replace(/-/g,'/'),
-        subject: String(r[4]||'').trim(),
-        memo: r[5], amount: Number(r[6])||0,
-        payee: r[7], note: r[11]||''
-      });
+      const seq = parseInt(no.split('-')[1],10) || 0;
+      const subject = String(r[4]||'').trim();
+      const key = seq + '|' + subject;
+      if(!groups[key]){
+        groups[key] = {
+          seq: seq, line: Number(r[1])||0,
+          rocDate: String(r[3]||'').replace(/-/g,'/'),
+          subject: subject, memos: [], amounts: [],
+          payee: r[7], note: r[11]||''
+        };
+        order.push(key);
+      }
+      const g = groups[key];
+      if(r[5]) g.memos.push(String(r[5]));
+      g.amounts.push(Number(r[6])||0);
     });
   }
+  const rows = order.map(k=>groups[k]);
   rows.sort((a,b)=> a.seq - b.seq || a.line - b.line);
 
   const name = REPORT_PREFIX + month;
@@ -199,7 +211,10 @@ function buildMonthlyReport_(month){
     const values = rows.map(r=>{
       const acct = map[r.subject] || '';
       if(!acct) unmapped.push(r);
-      return [r.seq, '', r.rocDate, acct || r.subject, '', r.memo, r.amount, r.payee, r.note];
+      const memo = r.memos.join('、');
+      // 多筆明細 → =a+b+c 公式；單筆 → 直接填數字
+      const amount = r.amounts.length > 1 ? '=' + r.amounts.join('+') : (r.amounts[0]||0);
+      return [r.seq, '', r.rocDate, acct || r.subject, '', memo, amount, r.payee, r.note];
     });
     sh.getRange(3,2,values.length,9).setValues(values);
     // 會計名稱：有對照的用 MID 公式切出名稱；未對照的整列標黃提醒

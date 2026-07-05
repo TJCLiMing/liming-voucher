@@ -112,6 +112,11 @@
       </div>
     </div>
 
+    <div class="field">
+      <label>科目（一張單一個科目）</label>
+      <select id="subject"></select>
+    </div>
+
     <div class="row2">
       <div class="field">
         <label>領款人（簽名欄）</label>
@@ -175,10 +180,11 @@ let SUBJECTS = MOCK_SUBJECTS.slice();
 const state = {
   no:"",
   date: new Date().toISOString().slice(0,10),
+  subject:"",
   payee:"", applicant:"",
   items:[ blankItem(), blankItem() ]
 };
-function blankItem(){ return {subject:"", memo:"", amount:""}; }
+function blankItem(){ return {memo:"", amount:""}; }
 
 /* ---------- helpers ---------- */
 function num(v){ const n = parseFloat(String(v).replace(/,/g,"")); return isNaN(n)?0:n; }
@@ -216,7 +222,6 @@ function renderItems(){
       <span class="item-no">第 ${i+1} 列</span>
       ${state.items.length>1?`<button class="del" data-del="${i}" title="刪除">×</button>`:""}
       <div class="grid">
-        <select data-i="${i}" data-k="subject">${subjectOptions(it.subject)}</select>
         <input data-i="${i}" data-k="memo" placeholder="摘要（例：7月安息日中餐）" value="${escAttr(it.memo)}">
         <div class="amt-wrap"><span class="cur">$</span>
           <input data-i="${i}" data-k="amount" inputmode="numeric" placeholder="0" value="${it.amount!==""?Number(num(it.amount)).toLocaleString("en-US"):""}">
@@ -225,6 +230,9 @@ function renderItems(){
     </div>`).join("");
 }
 function escAttr(s){ return String(s).replace(/"/g,"&quot;"); }
+function renderSubjectSelect(){
+  document.getElementById("subject").innerHTML = subjectOptions(state.subject);
+}
 
 /* ---------- preview render ---------- */
 function renderSheet(){
@@ -235,10 +243,10 @@ function renderSheet(){
   const totalD = splitDigits(t);
 
   const headDigits = COLS.map(c=>`<th class="digit">${c.label.replace("\n","<br>")}</th>`).join("");
-  const bodyRows = rows.map(it=>{
+  const bodyRows = rows.map((it,idx)=>{
     const d = splitDigits(it.amount);
     return `<tr>
-      <td class="subject">${it.subject||""}</td>
+      ${idx===0?`<td class="subject" rowspan="${rows.length}">${state.subject||""}</td>`:""}
       <td class="memo">${it.memo||""}</td>
       ${d.map(x=>`<td class="digit">${x}</td>`).join("")}
     </tr>`;
@@ -298,6 +306,7 @@ document.getElementById("addItem").onclick=()=>{ state.items.push(blankItem()); 
 ["no","payee","applicant"].forEach(id=>{
   document.getElementById(id).addEventListener("input",e=>{ state[id]=e.target.value; renderSheet(); });
 });
+document.getElementById("subject").addEventListener("change",e=>{ state.subject=e.target.value; renderSheet(); });
 document.getElementById("date").addEventListener("input",e=>{ state.date=e.target.value; renderSheet(); });
 document.getElementById("print").onclick=()=>window.print();
 document.getElementById("print2").onclick=()=>window.print();
@@ -320,7 +329,7 @@ async function apiPost(payload){
 
 async function loadSubjects(){
   if(!GAS_API_URL) return;
-  try{ const res=await apiGet("subjects"); if(Array.isArray(res)&&res.length){ SUBJECTS=res; renderItems(); } }
+  try{ const res=await apiGet("subjects"); if(Array.isArray(res)&&res.length){ SUBJECTS=res; renderSubjectSelect(); } }
   catch(err){ console.warn("科目載入失敗",err); }
 }
 async function suggestNo(){
@@ -330,17 +339,19 @@ async function suggestNo(){
 }
 
 async function saveVoucher(){
-  const items = state.items.filter(it=>it.subject||it.memo||num(it.amount)>0);
+  const items = state.items.filter(it=>it.memo||num(it.amount)>0);
   if(!items.length){ toast("請至少填一列明細",true); return; }
+  if(!state.subject){ toast("請選擇科目",true); return; }
   const rd=rocDate(state.date);
   const payload = {
     action:"save",
     no: state.no || "",
     date: state.date,
     rocDate: `${rd.y}-${String(rd.m).padStart(2,"0")}-${String(rd.d).padStart(2,"0")}`,
+    subject: state.subject,
     payee: state.payee, applicant: state.applicant,
     total: total(),
-    items: items.map(it=>({subject:it.subject, memo:it.memo, amount:num(it.amount)}))
+    items: items.map(it=>({memo:it.memo, amount:num(it.amount)}))
   };
 
   if(!GAS_API_URL){
@@ -362,6 +373,7 @@ async function saveVoucher(){
 /* ---------- init ---------- */
 (function init(){
   document.getElementById("date").value = state.date;
+  renderSubjectSelect();
   renderAll();
   if(!GAS_API_URL){
     const w=document.getElementById("modewarn");
