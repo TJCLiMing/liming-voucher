@@ -135,8 +135,10 @@ function saveVoucher(body){
     const no  = body.no && String(body.no).trim() ? String(body.no).trim() : buildNo_();
     const now = new Date();
     const items = body.items || [];
+    // 民國日期加 ' 前綴強制存為文字，避免 Sheet 誤判成西元 115 年
+    const roc = body.rocDate ? "'" + body.rocDate : '';
     const rows = items.map((it,i)=>([
-      no, i+1, body.date||'', body.rocDate||'',
+      no, i+1, body.date||'', roc,
       it.subject||'', it.memo||'', Number(it.amount)||0,
       body.payee||'', body.applicant||'', Number(body.total)||0, now, ''
     ]));
@@ -247,6 +249,7 @@ function getDataSheet_(){
     sh = ss.insertSheet(SHEET_DATA);
     sh.getRange(1,1,1,HEADERS.length).setValues([HEADERS]).setFontWeight('bold');
     sh.setFrozenRows(1);
+    sh.getRange('D2:D').setNumberFormat('@'); // 民國日期欄固定為文字格式
   }
   return sh;
 }
