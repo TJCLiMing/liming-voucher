@@ -267,6 +267,10 @@ function renderSheet(){
     </tr>`;
   }).join("");
 
+  // 用餐情形合計：左右兩組各自加總（比照 excel：人數(桌數)與金額都統計）
+  const sumSide = arr => arr.reduce((a,m)=>{ if(m){ a.p+=num(m.people); a.amt+=num(m.amount); } return a; },{p:0,amt:0});
+  const sL = sumSide(M.L), sR = sumSide(M.R);
+
   const buyRows = B.L.map((b,i)=>{
     const n = B.R[i];
     return `<tr>
@@ -289,8 +293,12 @@ function renderSheet(){
       <colgroup><col style="width:14%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:14%"><col style="width:12%"><col style="width:12%"><col style="width:12%"></colgroup>
       <tr><th>日期</th><th>餐別</th><th>人數<br>(桌數)</th><th>金額</th><th class="sep">日期</th><th>餐別</th><th>人數<br>(桌數)</th><th>金額</th></tr>
       ${mealRows}
-      <tr><td colspan="3">合　計</td><td class="num">${mealTotal()?mealTotal().toLocaleString("en-US"):""}</td>
-          <td class="sep" colspan="3"></td><td class="num"></td></tr>
+      <tr>
+        <td colspan="2">合　計</td><td>${sL.p||""}</td>
+        <td class="num">${sL.amt?sL.amt.toLocaleString("en-US"):""}</td>
+        <td class="sep" colspan="2">合　計</td><td>${sR.p||""}</td>
+        <td class="num">${sR.amt?sR.amt.toLocaleString("en-US"):""}</td>
+      </tr>
     </table>
     <div class="fline" style="display:flex;justify-content:space-between;margin-bottom:1mm">
       <span>採買明細：</span><span>附憑據 ${esc(state.receipts)||"　　"} 張</span>
