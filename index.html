@@ -119,11 +119,11 @@
 
     <div class="row2">
       <div class="field">
-        <label>領款人（簽名欄）</label>
+        <label>領款人（存紀錄用，列印時留空給簽名）</label>
         <input id="payee" placeholder="選填">
       </div>
       <div class="field">
-        <label>申請人</label>
+        <label>申請人（存紀錄用，列印時留空給簽名）</label>
         <input id="applicant" placeholder="選填">
       </div>
     </div>
@@ -272,13 +272,13 @@ function renderSheet(){
       ${bodyRows}
       <tr class="totalrow">
         <td class="subject">合計</td>
-        <td class="memo">領款人簽名：${state.payee||""}</td>
+        <td class="memo">領款人簽名：</td>
         ${totalD.map(x=>`<td class="digit">${x}</td>`).join("")}
       </tr>
     </table>
     <div class="paste"><span>單據黏貼處</span></div>
     <div class="signs">
-      <span>教務：</span><span>總務：</span><span>出納：</span><span>申請人：${state.applicant||""}</span>
+      <span>教務：</span><span>總務：</span><span>出納：</span><span>申請人：</span>
     </div>
   `;
 
