@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>黎明教會付款申請單（代傳票）</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧾</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@500;700&display=swap" rel="stylesheet">
@@ -51,6 +52,7 @@
   .btn.primary:hover{filter:brightness(1.08)}
   .btn.block{width:100%;justify-content:center}
   .actions{display:grid;gap:10px;margin-top:20px}
+  .actions .hint{margin:0;font-size:11px;color:var(--muted);line-height:1.5}
   .total-box{display:flex;align-items:baseline;justify-content:space-between;padding:12px 14px;background:#f6f7f9;border-radius:10px;margin-top:6px}
   .total-box .lbl{font-size:12px;color:var(--muted)}
   .total-box .val{font-family:var(--serif);font-size:22px;font-weight:700}
@@ -142,9 +144,12 @@
     <div class="warn" id="warn">金額超過 999,999，超出位數格「拾萬」範圍，請拆單或改匯款。</div>
 
     <div class="actions">
-      <button class="btn primary block" id="save">存到 Google Sheet</button>
-      <button class="btn block" id="print">列印 / 匯出 A4 PDF</button>
-      <button class="btn block" id="showList">已存單據（查詢 / 重印）</button>
+      <button class="btn primary block" id="print">存檔並列印 / 匯出 PDF</button>
+      <div class="row2">
+        <button class="btn" id="save">只存檔</button>
+        <button class="btn" id="showList">已存單據</button>
+      </div>
+      <p class="hint">「存檔並列印」會自動先存進 Google Sheet 取得單號再印；重印舊單請用「已存單據」。</p>
     </div>
   </div>
 
@@ -446,6 +451,7 @@ async function saveVoucher(){
     return true;
   }
   const btn=document.getElementById("save"); btn.disabled=true; btn.textContent="儲存中…";
+  const pbtn=document.getElementById("print"); pbtn.disabled=true;
   try{
     const res=await apiPost(payload);
     if(res&&res.ok){
@@ -455,7 +461,7 @@ async function saveVoucher(){
       return true;
     }else{ toast("儲存失敗："+((res&&res.error)||"未知錯誤"),true); return false; }
   }catch(err){ toast("連線失敗："+err.message,true); return false; }
-  finally{ btn.disabled=false; btn.textContent="存到 Google Sheet"; }
+  finally{ btn.disabled=false; btn.textContent="只存檔"; pbtn.disabled=false; }
 }
 
 /* ---------- init ---------- */
