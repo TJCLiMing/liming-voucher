@@ -26,9 +26,10 @@
   .editor{background:var(--panel);border-right:1px solid var(--line);padding:20px 18px 40px;overflow:auto}
   .editor h1{font-size:16px;font-weight:700;margin:0 0 2px}
   .editor .sub{color:var(--muted);font-size:12px;margin:0 0 6px}
-  .nav{font-size:12px;margin:0 0 18px}
-  .nav a{color:var(--accent)}
-  .nav b{color:var(--ink)}
+  .nav{display:flex;gap:6px;font-size:12px;margin:10px 0 18px;flex-wrap:wrap}
+  .nav a,.nav b{padding:6px 12px;border-radius:999px;border:1px solid var(--line);text-decoration:none;color:var(--ink);font-weight:400;background:#fff}
+  .nav a:hover{background:#eef2f7;border-color:var(--accent);color:var(--accent)}
+  .nav b{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:500}
   .field{margin-bottom:14px}
   .field label{display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px}
   .field input,.field select,
@@ -118,7 +119,7 @@
   <div class="editor">
     <h1>付款申請單填寫</h1>
     <p class="sub">真耶穌教會 黎明教會 · 代傳票</p>
-    <p class="nav no-print"><b>付款申請單</b> · <a href="proof.html">支出證明單</a> · <a href="food.html">伙食費支出證明單</a></p>
+    <p class="nav no-print"><b>付款申請單</b><a href="proof.html">支出證明單</a><a href="food.html">伙食費支出證明單</a></p>
 
     <div id="modewarn" class="modewarn" style="display:none"></div>
 

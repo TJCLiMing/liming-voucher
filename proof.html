@@ -24,9 +24,20 @@
   .editor{background:var(--panel);border-right:1px solid var(--line);padding:20px 18px 40px;overflow:auto}
   .editor h1{font-size:16px;font-weight:700;margin:0 0 2px}
   .editor .sub{color:var(--muted);font-size:12px;margin:0 0 6px}
-  .nav{font-size:12px;margin:0 0 18px}
-  .nav a{color:var(--accent)}
-  .nav b{color:var(--ink)}
+  .nav{display:flex;gap:6px;font-size:12px;margin:10px 0 18px;flex-wrap:wrap}
+  .nav a,.nav b{padding:6px 12px;border-radius:999px;border:1px solid var(--line);text-decoration:none;color:var(--ink);font-weight:400;background:#fff}
+  .nav a:hover{background:#eef2f7;border-color:var(--accent);color:var(--accent)}
+  .nav b{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:500}
+  .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:40;align-items:center;justify-content:center}
+  .modal.show{display:flex}
+  .modal-box{background:#fff;border-radius:12px;width:min(680px,92vw);max-height:80vh;display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+  .modal-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)}
+  .list-body{overflow:auto;padding:8px 16px 16px}
+  .ltable{width:100%;border-collapse:collapse;font-size:13px}
+  .ltable th,.ltable td{border-bottom:1px solid var(--line);padding:8px 6px;text-align:left}
+  .ltable th{color:var(--muted);font-weight:500}
+  .ltable tr.lrow{cursor:pointer}
+  .ltable tr.lrow:hover{background:#f2f5f9}
   .field{margin-bottom:14px}
   .field label{display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px}
   .field input{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;background:#fff;color:var(--ink)}
@@ -84,7 +95,7 @@
   <div class="editor">
     <h1>支出證明單</h1>
     <p class="sub">真耶穌教會 黎明教會 · 無單據支出用</p>
-    <p class="nav no-print"><a href="index.html">付款申請單</a> · <b>支出證明單</b> · <a href="food.html">伙食費支出證明單</a></p>
+    <p class="nav no-print"><a href="index.html">付款申請單</a><b>支出證明單</b><a href="food.html">伙食費支出證明單</a></p>
 
     <div class="row2">
       <div class="field">
@@ -123,8 +134,11 @@
 
     <div class="actions">
       <button class="btn primary block" id="print">存檔並列印 / 匯出 PDF</button>
-      <button class="btn block" id="save">只存檔</button>
-      <p class="hint">存檔會記錄到 Google Sheet 的「支出證明單」分頁（流水帳）。簽名欄留空由紙本簽名。</p>
+      <div class="row2">
+        <button class="btn" id="save">只存檔</button>
+        <button class="btn" id="showList">歷史資料</button>
+      </div>
+      <p class="hint">存檔會記錄到 Google Sheet 的「支出證明單」分頁。要重印或修改以前的單，請按「歷史資料」載入。簽名欄留空由紙本簽名。</p>
     </div>
   </div>
 
@@ -135,6 +149,12 @@
       </div>
       <div class="sheet" id="sheet"></div>
     </div>
+  </div>
+</div>
+<div class="modal" id="listModal">
+  <div class="modal-box">
+    <div class="modal-head"><b>歷史資料（支出證明單）</b><button class="btn small" id="closeList">關閉</button></div>
+    <div id="listBody" class="list-body"></div>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -267,6 +287,55 @@ async function printForm(){
   if(GAS_API_URL && hasContent && dirty){ const ok=await saveForm(); if(!ok) return; }
   window.print();
 }
+
+/* ---------- 歷史資料 ---------- */
+let LIST_CACHE = [];
+function rocToIso(s){
+  const p = String(s||"").split(/[-/]/).map(Number);
+  if(p.length!==3 || !p[0]) return "";
+  return `${p[0]+1911}-${String(p[1]).padStart(2,"0")}-${String(p[2]).padStart(2,"0")}`;
+}
+async function openList(){
+  const modal=document.getElementById("listModal"), box=document.getElementById("listBody");
+  modal.classList.add("show");
+  if(!GAS_API_URL){ box.innerHTML="示範模式沒有歷史資料"; return; }
+  box.innerHTML="載入中…";
+  try{
+    const rows=await fetch(GAS_API_URL+"?action=prooflist&limit=100").then(r=>r.json());
+    if(!Array.isArray(rows)||!rows.length){ box.innerHTML="尚無資料"; return; }
+    LIST_CACHE=rows.slice().reverse(); // 新的在上面
+    box.innerHTML=`<table class="ltable">
+      <tr><th>日期</th><th>科目</th><th>支出事由</th><th style="text-align:right">合計</th></tr>`+
+      LIST_CACHE.map((r,i)=>`<tr class="lrow" data-i="${i}">
+        <td>${esc(r["日期"]||"")}</td><td>${esc(r["科目"]||"")}</td><td>${esc(r["支出事由"]||"")}</td>
+        <td style="text-align:right">$${Number(r["合計"]||0).toLocaleString("en-US")}</td>
+      </tr>`).join("")+`</table>
+      <p style="color:var(--muted);font-size:12px;margin:10px 2px 0">點一筆載入左側表單即可重印或修改。載入後直接列印不會重複存檔；修改後再存會新增一筆。</p>`;
+  }catch(err){ box.innerHTML="載入失敗："+err.message; }
+}
+function loadRecord(i){
+  const r=LIST_CACHE[i]; if(!r) return;
+  let p=null; try{ p=JSON.parse(r["原始資料"]||""); }catch(e){}
+  if(!p){ toast("這筆是舊格式，無法自動載入",true); return; }
+  state.date = rocToIso(p.rocDate) || state.date;
+  state.subject=p.subject||""; state.reason=p.reason||""; state.why=p.why||""; state.payee=p.payee||"";
+  state.items=(p.items||[]).map(it=>({
+    name:it.name||"", qty:it.qty?String(it.qty):"", price:it.price?String(it.price):"", total:it.total?String(it.total):""
+  }));
+  while(state.items.length<ROWS_MIN) state.items.push(blank());
+  document.getElementById("date").value=state.date;
+  ["subject","reason","why","payee"].forEach(id=>document.getElementById(id).value=state[id]);
+  dirty=false; // 重印不重複存檔
+  renderAll();
+  document.getElementById("listModal").classList.remove("show");
+  toast("已載入，可直接列印");
+}
+document.getElementById("showList").onclick=openList;
+document.getElementById("closeList").onclick=()=>document.getElementById("listModal").classList.remove("show");
+document.getElementById("listModal").addEventListener("click",e=>{
+  if(e.target.id==="listModal") e.target.classList.remove("show");
+  const tr=e.target.closest("tr.lrow"); if(tr) loadRecord(+tr.dataset.i);
+});
 
 async function loadSubjects(){
   if(!GAS_API_URL) return;

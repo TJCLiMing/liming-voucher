@@ -39,6 +39,8 @@ function doGet(e){
   if(action === 'subjects') return json(getSubjects());
   if(action === 'nextno')   return json({ no: peekNextNo() });
   if(action === 'list')     return json(listRecent(Number(e.parameter.limit) || 20, e.parameter.month));
+  if(action === 'prooflist') return json(listSimple_('支出證明單', Number(e.parameter.limit) || 50));
+  if(action === 'foodlist')  return json(listSimple_('伙食費支出證明單', Number(e.parameter.limit) || 50));
   return json({ ok:true, msg:'黎明教會 付款申請單 API' });
 }
 
@@ -243,9 +245,9 @@ function saveProof(b){
     .map(it => String(it.name||'') + (it.qty?('×'+it.qty):'') + (it.price?('@'+it.price):'') + (it.total?('='+it.total):''))
     .filter(s => s).join('；');
   return appendSimple_('支出證明單',
-    ['建立時間','日期','科目','支出事由','不能取得單據之原因','受款者','明細','合計'],
+    ['建立時間','日期','科目','支出事由','不能取得單據之原因','受款者','明細','合計','原始資料'],
     [new Date(), "'"+String(b.rocDate||'').replace(/-/g,'/'), b.subject||'', b.reason||'',
-     b.why||'', b.payee||'', items, Number(b.total)||0]);
+     b.why||'', b.payee||'', items, Number(b.total)||0, JSON.stringify(b)]);
 }
 
 function saveFood(b){
@@ -256,10 +258,10 @@ function saveFood(b){
     .map(x => String(x.name||'') + (x.qty?('×'+x.qty):'') + (x.amount?('='+x.amount):''))
     .filter(s => s).join('；');
   return appendSimple_('伙食費支出證明單',
-    ['建立時間','日期','支出事由','期間自','期間至','受款者','人數','桌數','用餐情形','採買明細','附憑據張數','合計'],
+    ['建立時間','日期','支出事由','期間自','期間至','受款者','人數','桌數','用餐情形','採買明細','附憑據張數','合計','原始資料'],
     [new Date(), "'"+String(b.rocDate||'').replace(/-/g,'/'), b.reason||'',
      b.from?("'"+b.from):'', b.to?("'"+b.to):'', b.payee||'', b.people||'', b.tables||'',
-     meals, buys, b.receipts||'', Number(b.total)||0]);
+     meals, buys, b.receipts||'', Number(b.total)||0, JSON.stringify(b)]);
 }
 
 function appendSimple_(name, header, row){
@@ -270,14 +272,30 @@ function appendSimple_(name, header, row){
     let sh = ss.getSheetByName(name);
     if(!sh){
       sh = ss.insertSheet(name);
-      sh.getRange(1,1,1,header.length).setValues([header]).setFontWeight('bold');
       sh.setFrozenRows(1);
     }
+    // 標題列每次重寫（冪等），欄位增加時舊分頁也會補齊
+    sh.getRange(1,1,1,header.length).setValues([header]).setFontWeight('bold');
     sh.getRange(sh.getLastRow()+1, 1, 1, row.length).setValues([row]);
     return { ok:true };
   }finally{
     lock.releaseLock();
   }
+}
+
+/* 輔助表單流水帳查詢：回傳最後 limit 列（含原始資料 JSON，給前端還原表單） */
+function listSimple_(name, limit){
+  const sh = SpreadsheetApp.getActive().getSheetByName(name);
+  if(!sh) return [];
+  const last = sh.getLastRow();
+  if(last < 2) return [];
+  const nCols = sh.getLastColumn();
+  const header = sh.getRange(1,1,1,nCols).getValues()[0];
+  const start = Math.max(2, last - limit + 1);
+  const values = sh.getRange(start,1,last-start+1,nCols).getValues();
+  return values.map(r=>{
+    const o={}; header.forEach((h,i)=> o[h]=r[i]); return o;
+  });
 }
 
 /* ---------- 最近紀錄（預設本月，可帶 month=11506 查指定月） ---------- */
