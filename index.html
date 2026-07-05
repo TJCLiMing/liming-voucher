@@ -27,8 +27,10 @@
   .editor .sub{color:var(--muted);font-size:12px;margin:0 0 18px}
   .field{margin-bottom:14px}
   .field label{display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px}
-  .field input,.field select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;background:#fff;color:var(--ink)}
-  .field input:focus,.field select:focus{outline:2px solid var(--accent);outline-offset:0;border-color:var(--accent)}
+  .field input,.field select,
+  .item .grid input,.item .grid select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;background:#fff;color:var(--ink)}
+  .field input:focus,.field select:focus,
+  .item .grid input:focus,.item .grid select:focus{outline:2px solid var(--accent);outline-offset:0;border-color:var(--accent)}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 
   .items-head{display:flex;align-items:center;justify-content:space-between;margin:20px 0 8px}
