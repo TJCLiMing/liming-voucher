@@ -54,6 +54,16 @@
   .total-box .val{font-family:var(--serif);font-size:22px;font-weight:700}
   .warn{color:var(--danger);font-size:12px;margin-top:8px;display:none}
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:10px 16px;border-radius:8px;opacity:0;transition:.25s;pointer-events:none;z-index:50;font-size:13px}
+  .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:40;align-items:center;justify-content:center}
+  .modal.show{display:flex}
+  .modal-box{background:#fff;border-radius:12px;width:min(680px,92vw);max-height:80vh;display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+  .modal-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)}
+  .list-body{overflow:auto;padding:8px 16px 16px}
+  .ltable{width:100%;border-collapse:collapse;font-size:13px}
+  .ltable th,.ltable td{border-bottom:1px solid var(--line);padding:8px 6px;text-align:left}
+  .ltable th{color:var(--muted);font-weight:500}
+  .ltable tr.lrow{cursor:pointer}
+  .ltable tr.lrow:hover{background:#f2f5f9}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   .modewarn{font-size:11px;color:#9a6b00;background:#fff7e0;border:1px solid #f0dca0;border-radius:8px;padding:7px 10px;margin-bottom:14px}
 
@@ -112,15 +122,9 @@
       </div>
     </div>
 
-    <div class="row2">
-      <div class="field">
-        <label>領款人（存紀錄用，列印時留空給簽名）</label>
-        <input id="payee" placeholder="選填">
-      </div>
-      <div class="field">
-        <label>申請人（存紀錄用，列印時留空給簽名）</label>
-        <input id="applicant" placeholder="選填">
-      </div>
+    <div class="field">
+      <label>申請人（必填，存紀錄用；列印時留空給實體簽名）</label>
+      <input id="applicant" placeholder="請輸入姓名">
     </div>
 
     <div class="items-head">
@@ -138,6 +142,7 @@
     <div class="actions">
       <button class="btn primary block" id="save">存到 Google Sheet</button>
       <button class="btn block" id="print">列印 / 匯出 A4 PDF</button>
+      <button class="btn block" id="showList">已存單據（查詢 / 重印）</button>
     </div>
   </div>
 
@@ -151,6 +156,12 @@
     </div>
   </div>
 
+</div>
+<div class="modal" id="listModal">
+  <div class="modal-box">
+    <div class="modal-head"><b>本月已存單據</b><button class="btn small" id="closeList">關閉</button></div>
+    <div id="listBody" class="list-body"></div>
+  </div>
 </div>
 <div class="toast" id="toast"></div>
 
@@ -175,7 +186,7 @@ let SUBJECTS = MOCK_SUBJECTS.slice();
 const state = {
   no:"",
   date: new Date().toISOString().slice(0,10),
-  payee:"", applicant:"",
+  applicant:"",
   items:[ blankItem(), blankItem() ]
 };
 function blankItem(){ return {subject:"", memo:"", amount:""}; }
@@ -305,7 +316,7 @@ document.getElementById("items").addEventListener("click",e=>{
   if(d!=null){ state.items.splice(+d,1); if(!state.items.length) state.items.push(blankItem()); dirty=true; renderAll(); }
 });
 document.getElementById("addItem").onclick=()=>{ state.items.push(blankItem()); dirty=true; renderAll(); };
-["no","payee","applicant"].forEach(id=>{
+["no","applicant"].forEach(id=>{
   document.getElementById(id).addEventListener("input",e=>{ state[id]=e.target.value; dirty=true; renderSheet(); });
 });
 document.getElementById("date").addEventListener("input",e=>{ state.date=e.target.value; dirty=true; renderSheet(); });
@@ -322,6 +333,68 @@ async function printSheet(){
   }
   window.print();
 }
+
+/* ---------- 已存單據清單（查詢 / 重印） ---------- */
+let LIST_CACHE = {};
+async function openList(){
+  const modal=document.getElementById("listModal");
+  const box=document.getElementById("listBody");
+  modal.classList.add("show");
+  if(!GAS_API_URL){ box.innerHTML="示範模式沒有已存資料"; return; }
+  box.innerHTML="載入中…";
+  try{
+    const rows = await apiGet("list",{limit:300});
+    if(!Array.isArray(rows)||!rows.length){ box.innerHTML="本月尚無存檔"; return; }
+    const g={}, order=[];
+    rows.forEach(r=>{ const n=r["NO"]; if(g[n]==null){ g[n]=[]; order.push(n); } g[n].push(r); });
+    order.reverse(); // 新的在上面
+    LIST_CACHE = g;
+    box.innerHTML = `<table class="ltable">
+      <tr><th>NO</th><th>日期</th><th>科目</th><th style="text-align:right">合計</th><th>申請人</th></tr>` +
+      order.map(n=>{
+        const rs=g[n];
+        const t=rs.reduce((s,r)=>s+(Number(r["合計"])||0),0);
+        const subs=rs.map(r=>String(r["會計名稱"]||r["科目代號"]||"").trim()).filter(Boolean).join("、");
+        return `<tr class="lrow" data-no="${n}">
+          <td>${n}</td><td>${r0(rs)["日期"]||""}</td><td>${subs}</td>
+          <td style="text-align:right">$${t.toLocaleString("en-US")}</td><td>${r0(rs)["領款人"]||""}</td>
+        </tr>`;
+      }).join("") + `</table>
+      <p style="color:var(--muted);font-size:12px;margin:10px 2px 0">點一筆載入左側表單即可重印。載入後直接列印不會重複存檔；若修改內容再列印，會以新單號另存一筆。</p>`;
+  }catch(err){ box.innerHTML="載入失敗："+err.message; }
+}
+function r0(rs){ return rs[0]||{}; }
+function loadVoucher(n){
+  const rs=LIST_CACHE[n]; if(!rs||!rs.length) return;
+  const roc=String(rs[0]["日期"]||"").split("/"); // 115/07/05
+  let prefix="";
+  if(roc.length===3){
+    state.date=`${(+roc[0])+1911}-${String(roc[1]).padStart(2,"0")}-${String(roc[2]).padStart(2,"0")}`;
+    prefix=`${roc[0]}${String(roc[1]).padStart(2,"0")}`;
+  }
+  state.no = prefix ? `${prefix}-${String(n).padStart(2,"0")}` : String(n);
+  state.applicant = String(rs[0]["領款人"]||"");
+  state.items = rs.map(r=>({
+    subject: String(r["會計名稱"]||r["科目代號"]||"").trim(),
+    memo: String(r["摘要"]||""),
+    amount: String(Number(r["合計"])||"")
+  }));
+  if(!state.items.length) state.items=[blankItem()];
+  document.getElementById("no").value = state.no;
+  document.getElementById("date").value = state.date;
+  document.getElementById("applicant").value = state.applicant;
+  dirty = false; // 重印不重複存檔
+  renderAll();
+  document.getElementById("listModal").classList.remove("show");
+  toast("已載入 NO "+state.no+"，可直接列印");
+}
+document.getElementById("showList").onclick=openList;
+document.getElementById("closeList").onclick=()=>document.getElementById("listModal").classList.remove("show");
+document.getElementById("listModal").addEventListener("click",e=>{
+  if(e.target.id==="listModal") e.target.classList.remove("show");
+  const tr=e.target.closest("tr.lrow");
+  if(tr) loadVoucher(tr.dataset.no);
+});
 
 /* ---------- API ---------- */
 async function apiGet(action,params={}){
@@ -353,13 +426,14 @@ async function saveVoucher(){
   const items = state.items.filter(it=>it.subject||it.memo||num(it.amount)>0);
   if(!items.length){ toast("請至少填一列明細",true); return false; }
   if(items.some(it=>!it.subject)){ toast("每一列明細都要選科目",true); return false; }
+  if(!state.applicant.trim()){ toast("請填申請人",true); document.getElementById("applicant").focus(); return false; }
   const rd=rocDate(state.date);
   const payload = {
     action:"save",
     no: state.no || "",
     date: state.date,
     rocDate: `${rd.y}-${String(rd.m).padStart(2,"0")}-${String(rd.d).padStart(2,"0")}`,
-    payee: state.payee, applicant: state.applicant,
+    applicant: state.applicant,
     total: total(),
     items: items.map(it=>({subject:it.subject, memo:it.memo, amount:num(it.amount)}))
   };

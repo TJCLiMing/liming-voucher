@@ -8,7 +8,8 @@
  * 設計：存檔直接寫成會計 Excel 格式，每月一個分頁「會計支出115MM」
  *   B~J 欄與會計 xlsx 完全相同：
  *   NO | 月 | 日期 | 科目代號 | 會計名稱 | 摘要 | 合計 | 領款人 | 備註
- *   K~L 為系統額外欄：申請人 | 建立時間（會計可忽略或隱藏）
+ *   （領款人欄記「申請人」姓名；前端已無獨立領款人欄位）
+ *   K 為系統額外欄：建立時間（會計可忽略或隱藏）
  *
  *   一張申請單可含多個科目：
  *   - 同科目多筆明細 → 併成一列，摘要用「、」串接，合計寫 =a+b 公式
@@ -20,8 +21,8 @@
 
 const SHEET_SUBJECT = '科目';
 const MONTH_PREFIX  = '會計支出';
-// 月分頁欄位（從 B 欄起）：B=NO C=月 D=日期 E=科目代號 F=會計名稱 G=摘要 H=合計 I=領款人 J=備註 K=申請人 L=建立時間
-const HEADER = ['NO','月','日期','科目代號','會計名稱','摘要','合計','領款人','備註','申請人','建立時間'];
+// 月分頁欄位（從 B 欄起）：B=NO C=月 D=日期 E=科目代號 F=會計名稱 G=摘要 H=合計 I=領款人 J=備註 K=建立時間
+const HEADER = ['NO','月','日期','科目代號','會計名稱','摘要','合計','領款人','備註','建立時間'];
 const DATA_START_ROW = 3;   // 比照會計 xlsx：標題在第 2 列、B 欄起
 const COL_B = 2, N_COLS = HEADER.length;
 
@@ -37,7 +38,7 @@ function doGet(e){
   const action = (e.parameter.action || '').toLowerCase();
   if(action === 'subjects') return json(getSubjects());
   if(action === 'nextno')   return json({ no: peekNextNo() });
-  if(action === 'list')     return json(listRecent(Number(e.parameter.limit) || 20));
+  if(action === 'list')     return json(listRecent(Number(e.parameter.limit) || 20, e.parameter.month));
   return json({ ok:true, msg:'黎明教會 付款申請單 API' });
 }
 
@@ -203,7 +204,7 @@ function saveVoucher(body){
         seq, '', "'" + rocDate, acct || s,
         '',                       // F 會計名稱：寫入後補 MID 公式
         g.memos.join('、'), amount,
-        body.payee||'', '', body.applicant||'', now
+        body.applicant||'', '', now  // 領款人欄記申請人姓名
       ]);
     });
 
@@ -233,9 +234,10 @@ function saveVoucher(body){
   }
 }
 
-/* ---------- 最近紀錄（本月，給日後查詢頁用） ---------- */
-function listRecent(limit){
-  const sh = SpreadsheetApp.getActive().getSheetByName(MONTH_PREFIX + monthPrefix());
+/* ---------- 最近紀錄（預設本月，可帶 month=11506 查指定月） ---------- */
+function listRecent(limit, month){
+  const m = (month && /^\d{5}$/.test(String(month))) ? String(month) : monthPrefix();
+  const sh = SpreadsheetApp.getActive().getSheetByName(MONTH_PREFIX + m);
   if(!sh) return [];
   const sumRow = findSumRow_(sh);
   const lastData = (sumRow > 0 ? sumRow - 1 : sh.getLastRow());
