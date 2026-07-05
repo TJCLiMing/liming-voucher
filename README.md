@@ -25,11 +25,14 @@
 
 ```
 liming-voucher/
-├── index.html   # 前端：填單 UI + 即時 A4 預覽 + 列印 + 歷史資料清單（單檔 vanilla JS）
-├── Code.gs      # GAS 後端：JSON API（科目/流水號/存檔/查詢），需手動貼進 Apps Script
+├── index.html   # 主表單：付款申請單（填單 + A4 預覽 + 列印 + 歷史資料清單）
+├── proof.html   # 輔助表單：支出證明單（無單據支出用，單純存檔+列印）
+├── food.html    # 輔助表單：伙食費支出證明單（單純存檔+列印）
+├── Code.gs      # GAS 後端：JSON API（科目/流水號/存檔/查詢/輔助表單），需手動貼進 Apps Script
 ├── .nojekyll    # 停用 GitHub Pages 的 Jekyll 建置
 └── README.md
 ```
+三個頁面左上角有互相切換的連結。
 
 ## 核心設計（定案紀錄）
 
@@ -65,6 +68,9 @@ liming-voucher/
   - 最下方合計列（`=SUM(H3:H?)`＋I 欄「合計」）由程式在每次存檔後自動維護
   - 備註欄（J）由出納/會計直接在 Sheet 上註記（如「06/20已給會計」）
   - **不要手動改「合計」那一列**；改資料列沒問題，程式只認 I 欄=「合計」的列
+- **「支出證明單」「伙食費支出證明單」**（輔助表單流水帳，存檔自動建立）：
+  一張表單一列，明細序列化成文字（如 `白米×2包=1500；蔬菜×一批=2935`），
+  無特定格式要求，純留存紀錄；正式文件以列印的紙本（含簽名）為準。
 
 ## 後端 API（Code.gs）
 
@@ -76,7 +82,9 @@ Base URL：GAS Web App 的 `/exec` 網址（已填在 `index.html` 的 `GAS_API_
 | GET `?action=subjects` | — | 科目名稱陣列（給下拉） |
 | GET `?action=nextno` | — | 建議單號 `{"no":"11507-03"}` |
 | GET `?action=list` | `limit`(預設20)、`month`(選填,如11506) | 該月資料列陣列（HEADER 為 key） |
-| POST | body 見下 | 存檔 |
+| POST `action:"save"` | body 見下 | 付款申請單存檔 |
+| POST `action:"proof"` | rocDate/subject/reason/why/payee/items/total | 支出證明單存檔（一單一列流水帳） |
+| POST `action:"food"` | rocDate/reason/from/to/payee/people/tables/meals/buys/receipts/total | 伙食費支出證明單存檔（一單一列流水帳） |
 
 POST body（`action:"save"`）：
 ```json

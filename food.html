@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>伙食費支出證明單</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧾</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#eef0f3; --panel:#ffffff; --ink:#20242b; --muted:#6b7280;
+    --line:#d7dbe0; --accent:#39506e; --accent-ink:#fff;
+    --paper:#ffffff; --paper-ink:#1a1a1a; --paper-line:#2b2b2b;
+    --danger:#b23a3a;
+    --sans:"Noto Sans TC",system-ui,"PingFang TC","Microsoft JhengHei",sans-serif;
+    --serif:"Noto Serif TC","Songti TC","SimSun",serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5}
+  .app{display:grid;grid-template-columns:420px 1fr;min-height:100vh}
+  @media (max-width:900px){.app{grid-template-columns:1fr}}
+  .editor{background:var(--panel);border-right:1px solid var(--line);padding:20px 18px 40px;overflow:auto}
+  .editor h1{font-size:16px;font-weight:700;margin:0 0 2px}
+  .editor .sub{color:var(--muted);font-size:12px;margin:0 0 6px}
+  .nav{font-size:12px;margin:0 0 18px}
+  .nav a{color:var(--accent)}
+  .nav b{color:var(--ink)}
+  .field{margin-bottom:12px}
+  .field label{display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px}
+  .field input{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;background:#fff;color:var(--ink)}
+  .field input:focus{outline:2px solid var(--accent);outline-offset:0;border-color:var(--accent)}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .items-head{display:flex;align-items:center;justify-content:space-between;margin:18px 0 6px}
+  .items-head h2{font-size:13px;font-weight:700;margin:0}
+  .itable{width:100%;border-collapse:collapse;font-size:12px}
+  .itable th{color:var(--muted);font-weight:500;text-align:left;padding:2px 3px}
+  .itable td{padding:2px 3px}
+  .itable input{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font:inherit}
+  .itable input:focus{outline:2px solid var(--accent);outline-offset:0}
+  .total-box{display:flex;align-items:baseline;justify-content:space-between;padding:12px 14px;background:#f6f7f9;border-radius:10px;margin-top:10px}
+  .total-box .lbl{font-size:12px;color:var(--muted)}
+  .total-box .val{font-family:var(--serif);font-size:22px;font-weight:700}
+  .btn{border:1px solid var(--line);background:#fff;color:var(--ink);padding:8px 12px;border-radius:8px;cursor:pointer;font:inherit;font-weight:500}
+  .btn:hover{background:#f6f7f9}
+  .btn.small{padding:5px 10px;font-size:12px}
+  .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+  .btn.primary:hover{filter:brightness(1.08)}
+  .btn.block{width:100%}
+  .actions{display:grid;gap:10px;margin-top:20px}
+  .actions .hint{margin:0;font-size:11px;color:var(--muted);line-height:1.5}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:10px 16px;border-radius:8px;opacity:0;transition:.25s;pointer-events:none;z-index:50;font-size:13px}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  .preview{padding:28px;overflow:auto;display:flex;justify-content:center;align-items:flex-start}
+  .sheet{background:var(--paper);color:var(--paper-ink);width:186mm;min-height:200mm;padding:12mm 14mm;
+    box-shadow:0 2px 18px rgba(0,0,0,.12);font-family:var(--serif);font-size:11pt}
+  .sheet .title{text-align:center;font-size:19pt;font-weight:700;letter-spacing:4px;margin:1mm 0 3mm}
+  .sheet .date{text-align:center;font-size:11pt;margin-bottom:4mm}
+  .sheet .fline{margin:2.8mm 0;font-size:11.5pt}
+  .ptable{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10.5pt;margin-top:2mm}
+  .ptable th,.ptable td{border:1px solid var(--paper-line);padding:1.5mm;vertical-align:middle;height:8mm}
+  .ptable th{font-weight:500;text-align:center;background:#fafafa}
+  .ptable td{text-align:center}
+  .ptable td.name{text-align:left}
+  .ptable td.num{text-align:right}
+  .ptable td.sep{border-left-width:2px}
+  .sumline{margin-top:4mm;font-size:11.5pt}
+  .signs{display:flex;font-size:11.5pt;margin-top:10mm}
+  .signs span{flex:1}
+
+  .toolbar{position:sticky;top:0;display:flex;gap:8px;justify-content:flex-end;margin-bottom:14px}
+  @media print{
+    @page{size:A4 portrait;margin:0}
+    body{background:#fff}
+    .editor,.toolbar,.no-print{display:none!important}
+    .app{display:block}
+    .preview{padding:0;display:block}
+    .sheet{width:auto;box-shadow:none;padding:12mm 16mm;min-height:0}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="editor">
+    <h1>伙食費支出證明單</h1>
+    <p class="sub">真耶穌教會 黎明教會</p>
+    <p class="nav no-print"><a href="index.html">付款申請單</a> · <a href="proof.html">支出證明單</a> · <b>伙食費支出證明單</b></p>
+
+    <div class="row2">
+      <div class="field">
+        <label>日期</label>
+        <input id="date" type="date">
+      </div>
+      <div class="field">
+        <label>受款者</label>
+        <input id="payee" placeholder="姓名或商號">
+      </div>
+    </div>
+    <div class="field">
+      <label>支出事由</label>
+      <input id="reason" placeholder="例：安息日愛餐">
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>用餐期間（自）</label>
+        <input id="from" type="date">
+      </div>
+      <div class="field">
+        <label>用餐期間（至）</label>
+        <input id="to" type="date">
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>用餐人數</label>
+        <input id="people" inputmode="numeric" placeholder="人">
+      </div>
+      <div class="field">
+        <label>桌數</label>
+        <input id="tables" inputmode="numeric" placeholder="桌">
+      </div>
+    </div>
+
+    <div class="items-head">
+      <h2>用餐情形</h2>
+      <button class="btn small" id="addMeal">＋ 加一列</button>
+    </div>
+    <table class="itable">
+      <tr><th style="width:28%">日期</th><th style="width:24%">餐別</th><th style="width:20%">人數(桌數)</th><th style="width:20%">金額</th><th></th></tr>
+      <tbody id="meals"></tbody>
+    </table>
+
+    <div class="items-head">
+      <h2>採買明細</h2>
+      <button class="btn small" id="addBuy">＋ 加一列</button>
+    </div>
+    <table class="itable">
+      <tr><th style="width:44%">名稱</th><th style="width:24%">數量</th><th style="width:24%">金額</th><th></th></tr>
+      <tbody id="buys"></tbody>
+    </table>
+
+    <div class="field" style="margin-top:12px">
+      <label>附憑據（張）</label>
+      <input id="receipts" inputmode="numeric" placeholder="0">
+    </div>
+
+    <div class="total-box"><span class="lbl">合計（用餐＋採買）</span><span class="val" id="totalDisplay">$0</span></div>
+
+    <div class="actions">
+      <button class="btn primary block" id="print">存檔並列印 / 匯出 PDF</button>
+      <button class="btn block" id="save">只存檔</button>
+      <p class="hint">存檔會記錄到 Google Sheet 的「伙食費支出證明單」分頁（流水帳）。簽名欄留空由紙本簽名。</p>
+    </div>
+  </div>
+
+  <div class="preview">
+    <div style="width:186mm;max-width:100%">
+      <div class="toolbar no-print">
+        <button class="btn small" id="print2">列印 / 匯出 PDF</button>
+      </div>
+      <div class="sheet" id="sheet"></div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxoykK0pO9uIB1BrFY-laAmMrSr7SDZh0D6VWucu8EA1ZUOkU6nO4Q6TT_r8GLJFbqn/exec";
+const MEAL_MIN = 6, BUY_MIN = 6, MEAL_PRINT = 6, BUY_PRINT = 18;
+
+const state = {
+  date: new Date().toISOString().slice(0,10),
+  payee:"", reason:"", from:"", to:"", people:"", tables:"", receipts:"",
+  meals: Array.from({length:MEAL_MIN}, mealBlank),
+  buys:  Array.from({length:BUY_MIN}, buyBlank)
+};
+function mealBlank(){ return {date:"", meal:"", people:"", amount:""}; }
+function buyBlank(){ return {name:"", qty:"", amount:""}; }
+let dirty = true;
+
+function num(v){ const n=parseFloat(String(v).replace(/,/g,"")); return isNaN(n)?0:n; }
+function fmt(n){ return "$"+Math.round(n).toLocaleString("en-US"); }
+function mealTotal(){ return state.meals.reduce((s,m)=>s+num(m.amount),0); }
+function buyTotal(){ return state.buys.reduce((s,b)=>s+num(b.amount),0); }
+function grand(){ return mealTotal()+buyTotal(); }
+function roc(iso){ if(!iso) return {y:"",m:"",d:""}; const [Y,M,D]=iso.split("-").map(Number); return {y:Y-1911,m:M,d:D}; }
+function rocStr(iso){ const r=roc(iso); return r.y?`${r.y} 年 ${r.m} 月 ${r.d} 日`:"　　年　　月　　日"; }
+function toast(msg,bad){ const t=document.getElementById("toast"); t.textContent=msg;
+  t.style.background=bad?"var(--danger)":"var(--ink)"; t.classList.add("show");
+  setTimeout(()=>t.classList.remove("show"),2200); }
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;"); }
+function escAttr(s){ return String(s).replace(/"/g,"&quot;"); }
+
+function cnDigits(n){
+  n = Math.round(num(n));
+  if(n<=0) return {w:"　",q:"　",b:"　",s:"　",y:"　"};
+  const out={w:Math.floor(n/10000)||"", q:Math.floor(n%10000/1000), b:Math.floor(n%1000/100),
+             s:Math.floor(n%100/10), y:n%10};
+  let seen=false;
+  ["w","q","b","s"].forEach(k=>{ if(out[k]!=="" && out[k]!==0) seen=true;
+    if(!seen && (out[k]===0||out[k]==="")) out[k]="　"; });
+  return out;
+}
+
+function renderEditors(){
+  document.getElementById("meals").innerHTML = state.meals.map((m,i)=>`
+    <tr>
+      <td><input data-t="meals" data-i="${i}" data-k="date" placeholder="7/5" value="${escAttr(m.date)}"></td>
+      <td><input data-t="meals" data-i="${i}" data-k="meal" placeholder="午餐" value="${escAttr(m.meal)}"></td>
+      <td><input data-t="meals" data-i="${i}" data-k="people" value="${escAttr(m.people)}"></td>
+      <td><input data-t="meals" data-i="${i}" data-k="amount" inputmode="numeric" value="${escAttr(m.amount)}"></td>
+      <td>${state.meals.length>1?`<button class="btn small" data-delt="meals" data-del="${i}">×</button>`:""}</td>
+    </tr>`).join("");
+  document.getElementById("buys").innerHTML = state.buys.map((b,i)=>`
+    <tr>
+      <td><input data-t="buys" data-i="${i}" data-k="name" value="${escAttr(b.name)}"></td>
+      <td><input data-t="buys" data-i="${i}" data-k="qty" value="${escAttr(b.qty)}"></td>
+      <td><input data-t="buys" data-i="${i}" data-k="amount" inputmode="numeric" value="${escAttr(b.amount)}"></td>
+      <td>${state.buys.length>1?`<button class="btn small" data-delt="buys" data-del="${i}">×</button>`:""}</td>
+    </tr>`).join("");
+}
+
+/* 雙欄呈現：把清單分成左右兩半 */
+function twoCol(list, minRows){
+  const half = Math.max(minRows/2, Math.ceil(list.length/2));
+  const L=[], R=[];
+  for(let i=0;i<half;i++){ L.push(list[i]||null); R.push(list[half+i]||null); }
+  return {L,R,half};
+}
+
+function renderSheet(){
+  const r = roc(state.date);
+  const meals = state.meals.filter(m=>m.date||m.meal||num(m.amount)>0);
+  const buys  = state.buys.filter(b=>b.name||num(b.amount)>0);
+  const M = twoCol(meals, MEAL_PRINT), B = twoCol(buys, BUY_PRINT);
+  const d = cnDigits(grand());
+
+  const mealRows = M.L.map((m,i)=>{
+    const n = M.R[i];
+    return `<tr>
+      <td>${m?esc(m.date):""}</td><td>${m?esc(m.meal):""}</td><td>${m?esc(m.people):""}</td>
+      <td class="num">${m&&m.amount!==""?Number(num(m.amount)).toLocaleString("en-US"):""}</td>
+      <td class="sep">${n?esc(n.date):""}</td><td>${n?esc(n.meal):""}</td><td>${n?esc(n.people):""}</td>
+      <td class="num">${n&&n.amount!==""?Number(num(n.amount)).toLocaleString("en-US"):""}</td>
+    </tr>`;
+  }).join("");
+
+  const buyRows = B.L.map((b,i)=>{
+    const n = B.R[i];
+    return `<tr>
+      <td class="name">${b?esc(b.name):""}</td><td>${b?esc(b.qty):""}</td>
+      <td class="num">${b&&b.amount!==""?Number(num(b.amount)).toLocaleString("en-US"):""}</td>
+      <td class="sep name">${n?esc(n.name):""}</td><td>${n?esc(n.qty):""}</td>
+      <td class="num">${n&&n.amount!==""?Number(num(n.amount)).toLocaleString("en-US"):""}</td>
+    </tr>`;
+  }).join("");
+
+  document.getElementById("sheet").innerHTML = `
+    <div class="title">伙食費支出證明單</div>
+    <div class="date">${r.y||"　　"} 年 ${r.m||"　"} 月 ${r.d||"　"} 日</div>
+    <div class="fline">支出事由：${esc(state.reason)}</div>
+    <div class="fline">用餐期間：自 ${rocStr(state.from)} 至 ${rocStr(state.to)}</div>
+    <div class="fline">受 款 者：${esc(state.payee)}</div>
+    <div class="fline">用餐人數：${esc(state.people)||"　　"} 人　${esc(state.tables)||"　　"} 桌</div>
+    <div class="fline" style="margin-bottom:1mm">用餐情形：</div>
+    <table class="ptable">
+      <colgroup><col style="width:14%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:14%"><col style="width:12%"><col style="width:12%"><col style="width:12%"></colgroup>
+      <tr><th>日期</th><th>餐別</th><th>人數<br>(桌數)</th><th>金額</th><th class="sep">日期</th><th>餐別</th><th>人數<br>(桌數)</th><th>金額</th></tr>
+      ${mealRows}
+      <tr><td colspan="3">合　計</td><td class="num">${mealTotal()?mealTotal().toLocaleString("en-US"):""}</td>
+          <td class="sep" colspan="3"></td><td class="num"></td></tr>
+    </table>
+    <div class="fline" style="display:flex;justify-content:space-between;margin-bottom:1mm">
+      <span>採買明細：</span><span>附憑據 ${esc(state.receipts)||"　　"} 張</span>
+    </div>
+    <table class="ptable">
+      <colgroup><col style="width:24%"><col style="width:13%"><col style="width:13%"><col style="width:24%"><col style="width:13%"><col style="width:13%"></colgroup>
+      <tr><th>名稱</th><th>數量</th><th>金額</th><th class="sep">名稱</th><th>數量</th><th>金額</th></tr>
+      ${buyRows}
+    </table>
+    <div class="sumline">合計新台幣：　${d.w} 萬　${d.q} 千　${d.b} 佰　${d.s} 拾　${d.y} 元整</div>
+    <div class="signs"><span>負責人：</span><span>驗收或證明人：</span><span>製表：</span></div>
+  `;
+  document.getElementById("totalDisplay").textContent = fmt(grand());
+}
+function renderAll(){ renderEditors(); renderSheet(); }
+
+/* ---------- events ---------- */
+document.querySelector(".editor").addEventListener("input",e=>{
+  const el=e.target, t=el.dataset.t, i=el.dataset.i, k=el.dataset.k;
+  if(t!=null && i!=null){
+    let v=el.value;
+    if(k==="amount") v=v.replace(/[^\d]/g,"");
+    state[t][+i][k]=v; dirty=true; renderSheet(); return;
+  }
+  if(["date","payee","reason","from","to","people","tables","receipts"].includes(el.id)){
+    state[el.id]=el.value; dirty=true; renderSheet();
+  }
+});
+document.querySelector(".editor").addEventListener("click",e=>{
+  const t=e.target.dataset.delt, d=e.target.dataset.del;
+  if(t!=null && d!=null){
+    state[t].splice(+d,1);
+    if(!state[t].length) state[t].push(t==="meals"?mealBlank():buyBlank());
+    dirty=true; renderAll();
+  }
+});
+document.getElementById("addMeal").onclick=()=>{ state.meals.push(mealBlank()); dirty=true; renderAll(); };
+document.getElementById("addBuy").onclick=()=>{ state.buys.push(buyBlank()); dirty=true; renderAll(); };
+document.getElementById("save").onclick=saveForm;
+document.getElementById("print").onclick=printForm;
+document.getElementById("print2").onclick=printForm;
+
+async function saveForm(){
+  const meals=state.meals.filter(m=>m.date||m.meal||num(m.amount)>0);
+  const buys=state.buys.filter(b=>b.name||num(b.amount)>0);
+  if(!meals.length && !buys.length && !state.reason){ toast("請至少填事由或一列明細",true); return false; }
+  const r=roc(state.date), rf=roc(state.from), rt=roc(state.to);
+  const payload={ action:"food",
+    rocDate:`${r.y}-${String(r.m).padStart(2,"0")}-${String(r.d).padStart(2,"0")}`,
+    reason:state.reason,
+    from: state.from?`${rf.y}/${rf.m}/${rf.d}`:"", to: state.to?`${rt.y}/${rt.m}/${rt.d}`:"",
+    payee:state.payee, people:state.people, tables:state.tables, receipts:state.receipts,
+    total:grand(),
+    meals:meals.map(m=>({date:m.date,meal:m.meal,people:m.people,amount:num(m.amount)})),
+    buys:buys.map(b=>({name:b.name,qty:b.qty,amount:num(b.amount)})) };
+  if(!GAS_API_URL){ console.log(payload); toast("示範模式：未接後端"); return true; }
+  const b1=document.getElementById("save"), b2=document.getElementById("print");
+  b1.disabled=b2.disabled=true; b1.textContent="儲存中…";
+  try{
+    const res=await fetch(GAS_API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(payload)}).then(r=>r.json());
+    if(res&&res.ok){ dirty=false; toast("已存入 Google Sheet"); return true; }
+    toast("儲存失敗："+((res&&res.error)||"未知錯誤"),true); return false;
+  }catch(err){ toast("連線失敗："+err.message,true); return false; }
+  finally{ b1.disabled=b2.disabled=false; b1.textContent="只存檔"; }
+}
+async function printForm(){
+  const hasContent=state.meals.some(m=>m.date||num(m.amount)>0)||state.buys.some(b=>b.name||num(b.amount)>0)||state.reason;
+  if(GAS_API_URL && hasContent && dirty){ const ok=await saveForm(); if(!ok) return; }
+  window.print();
+}
+
+(function init(){
+  document.getElementById("date").value=state.date;
+  renderAll();
+})();
+</script>
+</body>
+</html>

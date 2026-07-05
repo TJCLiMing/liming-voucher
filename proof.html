@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>支出證明單</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧾</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#eef0f3; --panel:#ffffff; --ink:#20242b; --muted:#6b7280;
+    --line:#d7dbe0; --accent:#39506e; --accent-ink:#fff;
+    --paper:#ffffff; --paper-ink:#1a1a1a; --paper-line:#2b2b2b;
+    --danger:#b23a3a;
+    --sans:"Noto Sans TC",system-ui,"PingFang TC","Microsoft JhengHei",sans-serif;
+    --serif:"Noto Serif TC","Songti TC","SimSun",serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5}
+  .app{display:grid;grid-template-columns:400px 1fr;min-height:100vh}
+  @media (max-width:900px){.app{grid-template-columns:1fr}}
+  .editor{background:var(--panel);border-right:1px solid var(--line);padding:20px 18px 40px;overflow:auto}
+  .editor h1{font-size:16px;font-weight:700;margin:0 0 2px}
+  .editor .sub{color:var(--muted);font-size:12px;margin:0 0 6px}
+  .nav{font-size:12px;margin:0 0 18px}
+  .nav a{color:var(--accent)}
+  .nav b{color:var(--ink)}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px}
+  .field input{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;background:#fff;color:var(--ink)}
+  .field input:focus{outline:2px solid var(--accent);outline-offset:0;border-color:var(--accent)}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .items-head{display:flex;align-items:center;justify-content:space-between;margin:20px 0 8px}
+  .items-head h2{font-size:13px;font-weight:700;margin:0}
+  .itable{width:100%;border-collapse:collapse;font-size:12px}
+  .itable th{color:var(--muted);font-weight:500;text-align:left;padding:2px 3px}
+  .itable td{padding:2px 3px}
+  .itable input{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font:inherit}
+  .itable input:focus{outline:2px solid var(--accent);outline-offset:0}
+  .total-box{display:flex;align-items:baseline;justify-content:space-between;padding:12px 14px;background:#f6f7f9;border-radius:10px;margin-top:10px}
+  .total-box .lbl{font-size:12px;color:var(--muted)}
+  .total-box .val{font-family:var(--serif);font-size:22px;font-weight:700}
+  .btn{border:1px solid var(--line);background:#fff;color:var(--ink);padding:8px 12px;border-radius:8px;cursor:pointer;font:inherit;font-weight:500}
+  .btn:hover{background:#f6f7f9}
+  .btn.small{padding:5px 10px;font-size:12px}
+  .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+  .btn.primary:hover{filter:brightness(1.08)}
+  .btn.block{width:100%}
+  .actions{display:grid;gap:10px;margin-top:20px}
+  .actions .hint{margin:0;font-size:11px;color:var(--muted);line-height:1.5}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:10px 16px;border-radius:8px;opacity:0;transition:.25s;pointer-events:none;z-index:50;font-size:13px}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  .preview{padding:28px;overflow:auto;display:flex;justify-content:center;align-items:flex-start}
+  .sheet{background:var(--paper);color:var(--paper-ink);width:186mm;min-height:130mm;padding:12mm 16mm;
+    box-shadow:0 2px 18px rgba(0,0,0,.12);font-family:var(--serif);font-size:12pt}
+  .sheet .title{text-align:center;font-size:20pt;font-weight:700;letter-spacing:6px;margin:2mm 0 4mm}
+  .sheet .date{text-align:center;font-size:11pt;margin-bottom:6mm}
+  .sheet .fline{margin:3.5mm 0;font-size:12pt}
+  .ptable{width:100%;border-collapse:collapse;table-layout:fixed;font-size:11pt;margin-top:4mm}
+  .ptable th,.ptable td{border:1px solid var(--paper-line);padding:2mm;vertical-align:middle;height:9mm}
+  .ptable th{font-weight:500;text-align:center;background:#fafafa}
+  .ptable td.num{text-align:right}
+  .ptable td.name{text-align:left}
+  .sumline{margin-top:5mm;font-size:12pt}
+  .signs{display:flex;font-size:12pt;margin-top:12mm}
+  .signs span{flex:1}
+
+  .toolbar{position:sticky;top:0;display:flex;gap:8px;justify-content:flex-end;margin-bottom:14px}
+  @media print{
+    @page{size:A4 portrait;margin:0}
+    body{background:#fff}
+    .editor,.toolbar,.no-print{display:none!important}
+    .app{display:block}
+    .preview{padding:0;display:block}
+    .sheet{width:auto;box-shadow:none;padding:14mm 18mm;min-height:0}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="editor">
+    <h1>支出證明單</h1>
+    <p class="sub">真耶穌教會 黎明教會 · 無單據支出用</p>
+    <p class="nav no-print"><a href="index.html">付款申請單</a> · <b>支出證明單</b> · <a href="food.html">伙食費支出證明單</a></p>
+
+    <div class="row2">
+      <div class="field">
+        <label>日期</label>
+        <input id="date" type="date">
+      </div>
+      <div class="field">
+        <label>科目</label>
+        <input id="subject" list="subjectList" placeholder="例：雜費">
+        <datalist id="subjectList"></datalist>
+      </div>
+    </div>
+    <div class="field">
+      <label>支出事由</label>
+      <input id="reason" placeholder="例：市場採買零星用品">
+    </div>
+    <div class="field">
+      <label>不能取得單據之原因</label>
+      <input id="why" placeholder="例：攤販無法開立收據">
+    </div>
+    <div class="field">
+      <label>受款者</label>
+      <input id="payee" placeholder="姓名或商號">
+    </div>
+
+    <div class="items-head">
+      <h2>明細（總價可自動算或手動改）</h2>
+      <button class="btn small" id="addItem">＋ 加一列</button>
+    </div>
+    <table class="itable">
+      <tr><th style="width:34%">名稱</th><th style="width:16%">數量</th><th style="width:20%">單價</th><th style="width:20%">總價</th><th></th></tr>
+      <tbody id="items"></tbody>
+    </table>
+
+    <div class="total-box"><span class="lbl">合計</span><span class="val" id="totalDisplay">$0</span></div>
+
+    <div class="actions">
+      <button class="btn primary block" id="print">存檔並列印 / 匯出 PDF</button>
+      <button class="btn block" id="save">只存檔</button>
+      <p class="hint">存檔會記錄到 Google Sheet 的「支出證明單」分頁（流水帳）。簽名欄留空由紙本簽名。</p>
+    </div>
+  </div>
+
+  <div class="preview">
+    <div style="width:186mm;max-width:100%">
+      <div class="toolbar no-print">
+        <button class="btn small" id="print2">列印 / 匯出 PDF</button>
+      </div>
+      <div class="sheet" id="sheet"></div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxoykK0pO9uIB1BrFY-laAmMrSr7SDZh0D6VWucu8EA1ZUOkU6nO4Q6TT_r8GLJFbqn/exec";
+const ROWS_MIN = 5;
+
+const state = {
+  date: new Date().toISOString().slice(0,10),
+  subject:"", reason:"", why:"", payee:"",
+  items: Array.from({length:ROWS_MIN}, blank)
+};
+function blank(){ return {name:"", qty:"", price:"", total:""}; }
+let dirty = true;
+
+function num(v){ const n=parseFloat(String(v).replace(/,/g,"")); return isNaN(n)?0:n; }
+function fmt(n){ return "$"+Math.round(n).toLocaleString("en-US"); }
+function grand(){ return state.items.reduce((s,it)=>s+num(it.total),0); }
+function roc(iso){ if(!iso) return {y:"",m:"",d:""}; const [Y,M,D]=iso.split("-").map(Number); return {y:Y-1911,m:M,d:D}; }
+function toast(msg,bad){ const t=document.getElementById("toast"); t.textContent=msg;
+  t.style.background=bad?"var(--danger)":"var(--ink)"; t.classList.add("show");
+  setTimeout(()=>t.classList.remove("show"),2200); }
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;"); }
+function escAttr(s){ return String(s).replace(/"/g,"&quot;"); }
+
+/* 合計中文位數：萬 仟 佰 拾 元 */
+function cnDigits(n){
+  n = Math.round(num(n));
+  if(n<=0) return {w:"　",q:"　",b:"　",s:"　",y:"　"};
+  const w=Math.floor(n/10000), q=Math.floor(n%10000/1000), b=Math.floor(n%1000/100),
+        s=Math.floor(n%100/10), y=n%10;
+  const out={w:w||"", q:q, b:b, s:s, y:y};
+  // 高位為 0 時留空白（比照手寫習慣）
+  let seen=false;
+  ["w","q","b","s"].forEach(k=>{ if(out[k]!=="" && out[k]!==0) seen=true;
+    if(!seen && (out[k]===0||out[k]==="")) out[k]="　"; });
+  return out;
+}
+
+function renderItems(){
+  document.getElementById("items").innerHTML = state.items.map((it,i)=>`
+    <tr>
+      <td><input data-i="${i}" data-k="name" value="${escAttr(it.name)}"></td>
+      <td><input data-i="${i}" data-k="qty" inputmode="numeric" value="${escAttr(it.qty)}"></td>
+      <td><input data-i="${i}" data-k="price" inputmode="numeric" value="${escAttr(it.price)}"></td>
+      <td><input data-i="${i}" data-k="total" inputmode="numeric" value="${escAttr(it.total)}"></td>
+      <td>${state.items.length>1?`<button class="btn small" data-del="${i}">×</button>`:""}</td>
+    </tr>`).join("");
+}
+
+function renderSheet(){
+  const r = roc(state.date);
+  const rows = state.items.slice();
+  while(rows.length<ROWS_MIN) rows.push(blank());
+  const d = cnDigits(grand());
+  document.getElementById("sheet").innerHTML = `
+    <div class="title">支出證明單</div>
+    <div class="date">中華民國 ${r.y||"　　"} 年 ${r.m||"　"} 月 ${r.d||"　"} 日</div>
+    <div class="fline">科　　　　目：${esc(state.subject)}</div>
+    <div class="fline">支 出 事 由：${esc(state.reason)}</div>
+    <div class="fline">不能取得單據之原因：${esc(state.why)}</div>
+    <div class="fline">受　款　者：${esc(state.payee)}</div>
+    <table class="ptable">
+      <colgroup><col style="width:34%"><col style="width:14%"><col style="width:17%"><col style="width:17%"><col></colgroup>
+      <tr><th>名　稱</th><th>數　量</th><th>單　價</th><th>總　價</th><th>備　註</th></tr>
+      ${rows.map(it=>`<tr>
+        <td class="name">${esc(it.name)}</td>
+        <td class="num">${it.qty!==""?esc(it.qty):""}</td>
+        <td class="num">${it.price!==""?Number(num(it.price)).toLocaleString("en-US"):""}</td>
+        <td class="num">${it.total!==""?Number(num(it.total)).toLocaleString("en-US"):""}</td>
+        <td></td>
+      </tr>`).join("")}
+    </table>
+    <div class="sumline">合計新台幣：　${d.w} 萬　${d.q} 仟　${d.b} 佰　${d.s} 拾　${d.y} 元整</div>
+    <div class="signs"><span>股負責：</span><span>證明人：</span><span>經辦人：</span></div>
+  `;
+  document.getElementById("totalDisplay").textContent = fmt(grand());
+}
+function renderAll(){ renderItems(); renderSheet(); }
+
+/* ---------- events ---------- */
+document.getElementById("items").addEventListener("input",e=>{
+  const el=e.target, i=el.dataset.i, k=el.dataset.k;
+  if(i==null) return;
+  let v=el.value;
+  if(k!=="name") v=v.replace(/[^\d]/g,"");
+  state.items[+i][k]=v;
+  const it=state.items[+i];
+  if((k==="qty"||k==="price") && num(it.qty)>0 && num(it.price)>0){
+    it.total=String(num(it.qty)*num(it.price));
+    el.closest("tr").querySelector('[data-k="total"]').value=it.total;
+  }
+  dirty=true; renderSheet();
+});
+document.getElementById("items").addEventListener("click",e=>{
+  const d=e.target.dataset.del;
+  if(d!=null){ state.items.splice(+d,1); if(!state.items.length) state.items.push(blank()); dirty=true; renderAll(); }
+});
+document.getElementById("addItem").onclick=()=>{ state.items.push(blank()); dirty=true; renderAll(); };
+["subject","reason","why","payee"].forEach(id=>{
+  document.getElementById(id).addEventListener("input",e=>{ state[id]=e.target.value; dirty=true; renderSheet(); });
+});
+document.getElementById("date").addEventListener("input",e=>{ state.date=e.target.value; dirty=true; renderSheet(); });
+document.getElementById("save").onclick=saveForm;
+document.getElementById("print").onclick=printForm;
+document.getElementById("print2").onclick=printForm;
+
+async function saveForm(){
+  const items=state.items.filter(it=>it.name||num(it.total)>0);
+  if(!items.length && !state.reason){ toast("請至少填事由或一列明細",true); return false; }
+  const r=roc(state.date);
+  const payload={ action:"proof",
+    rocDate:`${r.y}-${String(r.m).padStart(2,"0")}-${String(r.d).padStart(2,"0")}`,
+    subject:state.subject, reason:state.reason, why:state.why, payee:state.payee,
+    total:grand(),
+    items:items.map(it=>({name:it.name, qty:num(it.qty), price:num(it.price), total:num(it.total)})) };
+  if(!GAS_API_URL){ console.log(payload); toast("示範模式：未接後端"); return true; }
+  const b1=document.getElementById("save"), b2=document.getElementById("print");
+  b1.disabled=b2.disabled=true; b1.textContent="儲存中…";
+  try{
+    const res=await fetch(GAS_API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(payload)}).then(r=>r.json());
+    if(res&&res.ok){ dirty=false; toast("已存入 Google Sheet"); return true; }
+    toast("儲存失敗："+((res&&res.error)||"未知錯誤"),true); return false;
+  }catch(err){ toast("連線失敗："+err.message,true); return false; }
+  finally{ b1.disabled=b2.disabled=false; b1.textContent="只存檔"; }
+}
+async function printForm(){
+  const hasContent=state.items.some(it=>it.name||num(it.total)>0)||state.reason;
+  if(GAS_API_URL && hasContent && dirty){ const ok=await saveForm(); if(!ok) return; }
+  window.print();
+}
+
+async function loadSubjects(){
+  if(!GAS_API_URL) return;
+  try{
+    const res=await fetch(GAS_API_URL+"?action=subjects").then(r=>r.json());
+    if(Array.isArray(res)&&res.length){
+      document.getElementById("subjectList").innerHTML=res.map(s=>`<option value="${escAttr(s)}">`).join("");
+    }
+  }catch(e){}
+}
+(function init(){
+  document.getElementById("date").value=state.date;
+  renderAll();
+  loadSubjects();
+})();
+</script>
+</body>
+</html>

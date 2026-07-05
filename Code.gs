@@ -45,7 +45,9 @@ function doGet(e){
 function doPost(e){
   try{
     const body = JSON.parse(e.postData.contents);
-    if(body.action === 'save') return json(saveVoucher(body));
+    if(body.action === 'save')  return json(saveVoucher(body));
+    if(body.action === 'proof') return json(saveProof(body));
+    if(body.action === 'food')  return json(saveFood(body));
     return json({ ok:false, error:'unknown action' });
   }catch(err){
     return json({ ok:false, error:String(err) });
@@ -229,6 +231,50 @@ function saveVoucher(body){
 
     return { ok:true, no: prefix + '-' + String(seq).padStart(2,'0'), rows: rows.length,
              unmapped: unmappedRows.length };
+  }finally{
+    lock.releaseLock();
+  }
+}
+
+/* ---------- 輔助表單：支出證明單 / 伙食費支出證明單 ----------
+ * 單純流水帳（無特定格式），一張表單一列 */
+function saveProof(b){
+  const items = (b.items||[])
+    .map(it => String(it.name||'') + (it.qty?('×'+it.qty):'') + (it.price?('@'+it.price):'') + (it.total?('='+it.total):''))
+    .filter(s => s).join('；');
+  return appendSimple_('支出證明單',
+    ['建立時間','日期','科目','支出事由','不能取得單據之原因','受款者','明細','合計'],
+    [new Date(), "'"+String(b.rocDate||'').replace(/-/g,'/'), b.subject||'', b.reason||'',
+     b.why||'', b.payee||'', items, Number(b.total)||0]);
+}
+
+function saveFood(b){
+  const meals = (b.meals||[])
+    .map(m => [m.date,m.meal,m.people?(m.people+'人(桌)'):'',m.amount?('$'+m.amount):''].filter(String).join(' '))
+    .filter(s => s).join('；');
+  const buys = (b.buys||[])
+    .map(x => String(x.name||'') + (x.qty?('×'+x.qty):'') + (x.amount?('='+x.amount):''))
+    .filter(s => s).join('；');
+  return appendSimple_('伙食費支出證明單',
+    ['建立時間','日期','支出事由','期間自','期間至','受款者','人數','桌數','用餐情形','採買明細','附憑據張數','合計'],
+    [new Date(), "'"+String(b.rocDate||'').replace(/-/g,'/'), b.reason||'',
+     b.from||'', b.to||'', b.payee||'', b.people||'', b.tables||'',
+     meals, buys, b.receipts||'', Number(b.total)||0]);
+}
+
+function appendSimple_(name, header, row){
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try{
+    const ss = SpreadsheetApp.getActive();
+    let sh = ss.getSheetByName(name);
+    if(!sh){
+      sh = ss.insertSheet(name);
+      sh.getRange(1,1,1,header.length).setValues([header]).setFontWeight('bold');
+      sh.setFrozenRows(1);
+    }
+    sh.getRange(sh.getLastRow()+1, 1, 1, row.length).setValues([row]);
+    return { ok:true };
   }finally{
     lock.releaseLock();
   }
