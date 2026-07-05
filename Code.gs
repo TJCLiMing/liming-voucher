@@ -258,7 +258,7 @@ function saveFood(b){
   return appendSimple_('伙食費支出證明單',
     ['建立時間','日期','支出事由','期間自','期間至','受款者','人數','桌數','用餐情形','採買明細','附憑據張數','合計'],
     [new Date(), "'"+String(b.rocDate||'').replace(/-/g,'/'), b.reason||'',
-     b.from||'', b.to||'', b.payee||'', b.people||'', b.tables||'',
+     b.from?("'"+b.from):'', b.to?("'"+b.to):'', b.payee||'', b.people||'', b.tables||'',
      meals, buys, b.receipts||'', Number(b.total)||0]);
 }
 
