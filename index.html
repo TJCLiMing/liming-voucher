@@ -147,9 +147,9 @@
       <button class="btn primary block" id="print">存檔並列印 / 匯出 PDF</button>
       <div class="row2">
         <button class="btn" id="save">只存檔</button>
-        <button class="btn" id="showList">已存單據</button>
+        <button class="btn" id="showList">歷史資料</button>
       </div>
-      <p class="hint">「存檔並列印」會自動先存進 Google Sheet 取得單號再印；重印舊單請用「已存單據」。</p>
+      <p class="hint">「存檔並列印」會自動先存進 Google Sheet 取得單號再印；要重印以前的單，請按「歷史資料」。</p>
     </div>
   </div>
 
@@ -166,7 +166,7 @@
 </div>
 <div class="modal" id="listModal">
   <div class="modal-box">
-    <div class="modal-head"><b>本月已存單據</b><button class="btn small" id="closeList">關閉</button></div>
+    <div class="modal-head"><b>歷史資料（本月）</b><button class="btn small" id="closeList">關閉</button></div>
     <div id="listBody" class="list-body"></div>
   </div>
 </div>
@@ -347,11 +347,11 @@ async function openList(){
   const modal=document.getElementById("listModal");
   const box=document.getElementById("listBody");
   modal.classList.add("show");
-  if(!GAS_API_URL){ box.innerHTML="示範模式沒有已存資料"; return; }
+  if(!GAS_API_URL){ box.innerHTML="示範模式沒有歷史資料"; return; }
   box.innerHTML="載入中…";
   try{
     const rows = await apiGet("list",{limit:300});
-    if(!Array.isArray(rows)||!rows.length){ box.innerHTML="本月尚無存檔"; return; }
+    if(!Array.isArray(rows)||!rows.length){ box.innerHTML="本月尚無資料"; return; }
     const g={}, order=[];
     rows.forEach(r=>{ const n=r["NO"]; if(g[n]==null){ g[n]=[]; order.push(n); } g[n].push(r); });
     order.reverse(); // 新的在上面

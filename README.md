@@ -25,7 +25,7 @@
 
 ```
 liming-voucher/
-├── index.html   # 前端：填單 UI + 即時 A4 預覽 + 列印 + 已存單據清單（單檔 vanilla JS）
+├── index.html   # 前端：填單 UI + 即時 A4 預覽 + 列印 + 歷史資料清單（單檔 vanilla JS）
 ├── Code.gs      # GAS 後端：JSON API（科目/流水號/存檔/查詢），需手動貼進 Apps Script
 ├── .nojekyll    # 停用 GitHub Pages 的 Jekyll 建置
 └── README.md
@@ -41,8 +41,8 @@ liming-voucher/
 - **NO**：月內流水整數（1、2、3…）；前端顯示/紙本印 `11507-16`（民國年月-NO）。
   前端建議號若被同時段其他人用走，存檔時自動遞補下一號。
 - **列印自動存檔**：主按鈕「存檔並列印」未存檔或有改動就先存再印；空白單直接印。
-  「只存檔」給不印紙本的情況；「已存單據」查詢/重印。
-- **重印不重複存檔**：從「已存單據」載入後 `dirty=false`，直接列印不再寫入；
+  「只存檔」給不印紙本的情況；「歷史資料」查詢/重印。
+- **重印不重複存檔**：從「歷史資料」載入後 `dirty=false`，直接列印不再寫入；
   修改內容後列印則以新 NO 另存一筆。
 - **簽名**：前端只填「申請人」（必填），Sheet 的「領款人」欄記申請人姓名；
   A4 列印的領款人簽名／申請人一律留空給實體簽名。
@@ -119,7 +119,7 @@ curl -sL "<EXEC_URL>?action=subjects"   # 應回科目陣列
   - `renderItems()` 畫左側明細編輯、`renderSheet()` 畫右側 A4 預覽
   - `splitDigits()` 金額拆位數格、`COLS` 定義位數欄（要加「百萬」欄改這裡＋上限）
   - `dirty` 旗標＋`printSheet()`＝列印前自動存檔；`saveVoucher()` 回傳 true/false
-  - `openList()/loadVoucher()`＝已存單據清單與載入重印（`LIST_CACHE` 依 NO 分組）
+  - `openList()/loadVoucher()`＝歷史資料清單與載入重印（`LIST_CACHE` 依 NO 分組）
   - 金額輸入「輸入中不重畫、失焦才補千分位」——別改回每鍵 render，會掉焦點
   - 明細欄位樣式選擇器是 `.item .grid input/select`（不在 `.field` 底下）
 - **Code.gs**：
