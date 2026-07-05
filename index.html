@@ -112,11 +112,6 @@
       </div>
     </div>
 
-    <div class="field">
-      <label>科目（一張單一個科目）</label>
-      <select id="subject"></select>
-    </div>
-
     <div class="row2">
       <div class="field">
         <label>領款人（存紀錄用，列印時留空給簽名）</label>
@@ -180,11 +175,11 @@ let SUBJECTS = MOCK_SUBJECTS.slice();
 const state = {
   no:"",
   date: new Date().toISOString().slice(0,10),
-  subject:"",
   payee:"", applicant:"",
   items:[ blankItem(), blankItem() ]
 };
-function blankItem(){ return {memo:"", amount:""}; }
+function blankItem(){ return {subject:"", memo:"", amount:""}; }
+let dirty = true; // 尚未存檔或存檔後有改動
 
 /* ---------- helpers ---------- */
 function num(v){ const n = parseFloat(String(v).replace(/,/g,"")); return isNaN(n)?0:n; }
@@ -222,6 +217,7 @@ function renderItems(){
       <span class="item-no">第 ${i+1} 列</span>
       ${state.items.length>1?`<button class="del" data-del="${i}" title="刪除">×</button>`:""}
       <div class="grid">
+        <select data-i="${i}" data-k="subject">${subjectOptions(it.subject)}</select>
         <input data-i="${i}" data-k="memo" placeholder="摘要（例：7月安息日中餐）" value="${escAttr(it.memo)}">
         <div class="amt-wrap"><span class="cur">$</span>
           <input data-i="${i}" data-k="amount" inputmode="numeric" placeholder="0" value="${it.amount!==""?Number(num(it.amount)).toLocaleString("en-US"):""}">
@@ -230,9 +226,6 @@ function renderItems(){
     </div>`).join("");
 }
 function escAttr(s){ return String(s).replace(/"/g,"&quot;"); }
-function renderSubjectSelect(){
-  document.getElementById("subject").innerHTML = subjectOptions(state.subject);
-}
 
 /* ---------- preview render ---------- */
 function renderSheet(){
@@ -243,10 +236,10 @@ function renderSheet(){
   const totalD = splitDigits(t);
 
   const headDigits = COLS.map(c=>`<th class="digit">${c.label.replace("\n","<br>")}</th>`).join("");
-  const bodyRows = rows.map((it,idx)=>{
+  const bodyRows = rows.map(it=>{
     const d = splitDigits(it.amount);
     return `<tr>
-      ${idx===0?`<td class="subject" rowspan="${rows.length}">${state.subject||""}</td>`:""}
+      <td class="subject">${it.subject||""}</td>
       <td class="memo">${it.memo||""}</td>
       ${d.map(x=>`<td class="digit">${x}</td>`).join("")}
     </tr>`;
@@ -296,6 +289,7 @@ document.getElementById("items").addEventListener("input",e=>{
   let v = el.value;
   if(k==="amount") v = v.replace(/[^\d]/g,"");
   state.items[+i][k] = v;
+  dirty = true;
   renderSheet();   // 輸入中只更新預覽與合計，不重畫輸入框（避免打字被打斷）
 });
 // 金額欄離開時才補千分位
@@ -308,17 +302,26 @@ document.getElementById("items").addEventListener("focusout",e=>{
 });
 document.getElementById("items").addEventListener("click",e=>{
   const d=e.target.dataset.del;
-  if(d!=null){ state.items.splice(+d,1); if(!state.items.length) state.items.push(blankItem()); renderAll(); }
+  if(d!=null){ state.items.splice(+d,1); if(!state.items.length) state.items.push(blankItem()); dirty=true; renderAll(); }
 });
-document.getElementById("addItem").onclick=()=>{ state.items.push(blankItem()); renderAll(); };
+document.getElementById("addItem").onclick=()=>{ state.items.push(blankItem()); dirty=true; renderAll(); };
 ["no","payee","applicant"].forEach(id=>{
-  document.getElementById(id).addEventListener("input",e=>{ state[id]=e.target.value; renderSheet(); });
+  document.getElementById(id).addEventListener("input",e=>{ state[id]=e.target.value; dirty=true; renderSheet(); });
 });
-document.getElementById("subject").addEventListener("change",e=>{ state.subject=e.target.value; renderSheet(); });
-document.getElementById("date").addEventListener("input",e=>{ state.date=e.target.value; renderSheet(); });
-document.getElementById("print").onclick=()=>window.print();
-document.getElementById("print2").onclick=()=>window.print();
+document.getElementById("date").addEventListener("input",e=>{ state.date=e.target.value; dirty=true; renderSheet(); });
+document.getElementById("print").onclick=printSheet;
+document.getElementById("print2").onclick=printSheet;
 document.getElementById("save").onclick=saveVoucher;
+
+/* 列印前自動存檔：沒存過或有改動就先存（拿到 NO 才印）；空白單直接印 */
+async function printSheet(){
+  const hasContent = state.items.some(it=>it.subject||it.memo||num(it.amount)>0);
+  if(GAS_API_URL && hasContent && dirty){
+    const ok = await saveVoucher();
+    if(!ok) return; // 存檔失敗不印，避免紙本沒有紀錄
+  }
+  window.print();
+}
 
 /* ---------- API ---------- */
 async function apiGet(action,params={}){
@@ -337,7 +340,7 @@ async function apiPost(payload){
 
 async function loadSubjects(){
   if(!GAS_API_URL) return;
-  try{ const res=await apiGet("subjects"); if(Array.isArray(res)&&res.length){ SUBJECTS=res; renderSubjectSelect(); } }
+  try{ const res=await apiGet("subjects"); if(Array.isArray(res)&&res.length){ SUBJECTS=res; renderItems(); } }
   catch(err){ console.warn("科目載入失敗",err); }
 }
 async function suggestNo(){
@@ -347,41 +350,41 @@ async function suggestNo(){
 }
 
 async function saveVoucher(){
-  const items = state.items.filter(it=>it.memo||num(it.amount)>0);
-  if(!items.length){ toast("請至少填一列明細",true); return; }
-  if(!state.subject){ toast("請選擇科目",true); return; }
+  const items = state.items.filter(it=>it.subject||it.memo||num(it.amount)>0);
+  if(!items.length){ toast("請至少填一列明細",true); return false; }
+  if(items.some(it=>!it.subject)){ toast("每一列明細都要選科目",true); return false; }
   const rd=rocDate(state.date);
   const payload = {
     action:"save",
     no: state.no || "",
     date: state.date,
     rocDate: `${rd.y}-${String(rd.m).padStart(2,"0")}-${String(rd.d).padStart(2,"0")}`,
-    subject: state.subject,
     payee: state.payee, applicant: state.applicant,
     total: total(),
-    items: items.map(it=>({memo:it.memo, amount:num(it.amount)}))
+    items: items.map(it=>({subject:it.subject, memo:it.memo, amount:num(it.amount)}))
   };
 
   if(!GAS_API_URL){
     console.log("要送出的資料：",payload);
     toast("示範模式：資料已印在 Console（未接後端）");
-    return;
+    return true;
   }
   const btn=document.getElementById("save"); btn.disabled=true; btn.textContent="儲存中…";
   try{
     const res=await apiPost(payload);
     if(res&&res.ok){
       if(res.no){ state.no=res.no; document.getElementById("no").value=res.no; renderSheet(); }
+      dirty = false;
       toast("已存入 Google Sheet（No："+(res.no||"")+"）");
-    }else{ toast("儲存失敗："+((res&&res.error)||"未知錯誤"),true); }
-  }catch(err){ toast("連線失敗："+err.message,true); }
+      return true;
+    }else{ toast("儲存失敗："+((res&&res.error)||"未知錯誤"),true); return false; }
+  }catch(err){ toast("連線失敗："+err.message,true); return false; }
   finally{ btn.disabled=false; btn.textContent="存到 Google Sheet"; }
 }
 
 /* ---------- init ---------- */
 (function init(){
   document.getElementById("date").value = state.date;
-  renderSubjectSelect();
   renderAll();
   if(!GAS_API_URL){
     const w=document.getElementById("modewarn");

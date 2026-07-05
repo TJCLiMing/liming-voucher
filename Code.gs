@@ -1,28 +1,33 @@
 /*************************************************************
- * 黎明教會 付款申請單（代傳票）後端 API + 會計月報
+ * 黎明教會 付款申請單（代傳票）後端 API
  * 部署：部署 → 新增部署作業 → 網頁應用程式
  *   執行身分：我
  *   誰可以存取：任何人
  * 把 /exec 網址貼到前端 index.html 的 GAS_API_URL
  *
- * Google Sheet 分頁：
- *   1.「科目」   A 欄科目名稱（前端下拉用）、B 欄會計科目（代號+名稱，產月報用）
- *               可從選單「黎明教會 → 初始化科目分頁」建立預設內容
- *   2.「申請單」 流水帳，由程式自動建立標題列
- *   3.「會計支出115MM」 月報分頁，由選單「產生會計月報」自動生成
+ * 設計：存檔直接寫成會計 Excel 格式，每月一個分頁「會計支出115MM」
+ *   B~J 欄與會計 xlsx 完全相同：
+ *   NO | 月 | 日期 | 科目代號 | 會計名稱 | 摘要 | 合計 | 領款人 | 備註
+ *   K~L 為系統額外欄：申請人 | 建立時間（會計可忽略或隱藏）
+ *
+ *   一張申請單可含多個科目：
+ *   - 同科目多筆明細 → 併成一列，摘要用「、」串接，合計寫 =a+b 公式
+ *   - 不同科目 → 各一列，共用同一個 NO（同會計 xlsx 的 NO16 做法）
+ *   NO 為月內流水整數；前端顯示/紙本印「11507-16」
+ *
+ * 另需「科目」分頁：A 欄科目名稱（前端下拉）、B 欄會計科目（代號+名稱）
  *************************************************************/
 
 const SHEET_SUBJECT = '科目';
-const SHEET_DATA    = '申請單';
-const REPORT_PREFIX = '會計支出';
-const HEADERS = ['流水號','序','日期','民國日期','科目','摘要','金額','領款人','申請人','合計','建立時間','備註'];
+const MONTH_PREFIX  = '會計支出';
+// 月分頁欄位（從 B 欄起）：B=NO C=月 D=日期 E=科目代號 F=會計名稱 G=摘要 H=合計 I=領款人 J=備註 K=申請人 L=建立時間
+const HEADER = ['NO','月','日期','科目代號','會計名稱','摘要','合計','領款人','備註','申請人','建立時間'];
+const DATA_START_ROW = 3;   // 比照會計 xlsx：標題在第 2 列、B 欄起
+const COL_B = 2, N_COLS = HEADER.length;
 
 /* ---------- 試算表選單 ---------- */
 function onOpen(){
   SpreadsheetApp.getUi().createMenu('黎明教會')
-    .addItem('產生本月會計月報','reportThisMonth')
-    .addItem('產生指定月份月報…','reportPickMonth')
-    .addSeparator()
     .addItem('初始化科目分頁','initSubjectSheet')
     .addToUi();
 }
@@ -98,8 +103,7 @@ function initSubjectSheet(){
   sh.setFrozenRows(1);
 }
 
-/* ---------- 流水號：民國年月 + 月內序，如 11507-16 ----------
- * 同一張申請單多列共用同一號；月報 NO 直接取「-」後的序號 */
+/* ---------- 月分頁 ---------- */
 function monthPrefix(){
   const tz = SpreadsheetApp.getActive().getSpreadsheetTimeZone();
   const now = new Date();
@@ -107,167 +111,143 @@ function monthPrefix(){
   const mm = Utilities.formatDate(now, tz, 'MM');
   return String(roc) + mm; // 例 11507
 }
-function peekNextNo(){ return buildNo_(); }
-function buildNo_(){
-  const sh = getDataSheet_();
-  const prefix = monthPrefix();
-  const last = sh.getLastRow();
-  let maxSeq = 0;
-  if(last >= 2){
-    const nos = sh.getRange(2,1,last-1,1).getValues();
-    nos.forEach(r=>{
-      const s = String(r[0]);
-      if(s.indexOf(prefix + '-') === 0){
-        const seq = parseInt(s.split('-')[1],10);
-        if(!isNaN(seq) && seq > maxSeq) maxSeq = seq;
-      }
-    });
+
+function getMonthSheet_(prefix){
+  const ss = SpreadsheetApp.getActive();
+  const name = MONTH_PREFIX + prefix;
+  let sh = ss.getSheetByName(name);
+  if(!sh){
+    sh = ss.insertSheet(name);
+    sh.getRange(2,COL_B,1,N_COLS).setValues([HEADER])
+      .setFontWeight('bold').setHorizontalAlignment('center');
+    sh.setFrozenRows(2);
+    sh.getRange('D:D').setNumberFormat('@');      // 日期存民國文字 115/07/05
+    sh.getRange('H:H').setNumberFormat('#,##0');  // 金額千分位
+    sh.setColumnWidth(7,320);                     // 摘要
+    sh.getRange('G:G').setWrap(true);
   }
-  return prefix + '-' + String(maxSeq + 1).padStart(2,'0');
+  return sh;
 }
 
-/* ---------- 儲存（一張單多列，共用流水號） ---------- */
+/* 合計列位置（I 欄 = '合計'），沒有則回 -1 */
+function findSumRow_(sh){
+  const last = sh.getLastRow();
+  if(last < DATA_START_ROW) return -1;
+  const vals = sh.getRange(DATA_START_ROW,9,last-DATA_START_ROW+1,1).getValues(); // I 欄
+  for(let i=vals.length-1;i>=0;i--){
+    if(String(vals[i][0]).trim() === '合計') return DATA_START_ROW+i;
+  }
+  return -1;
+}
+
+/* 該月最大 NO */
+function maxNo_(sh){
+  const last = sh.getLastRow();
+  if(last < DATA_START_ROW) return 0;
+  const vals = sh.getRange(DATA_START_ROW,COL_B,last-DATA_START_ROW+1,1).getValues();
+  let m = 0;
+  vals.forEach(r=>{
+    const n = parseInt(r[0],10);
+    if(!isNaN(n) && n > m) m = n;
+  });
+  return m;
+}
+
+function peekNextNo(){
+  const prefix = monthPrefix();
+  const sh = SpreadsheetApp.getActive().getSheetByName(MONTH_PREFIX + prefix);
+  const next = (sh ? maxNo_(sh) : 0) + 1;
+  return prefix + '-' + String(next).padStart(2,'0');
+}
+
+/* ---------- 儲存：直接寫成會計格式 ---------- */
 function saveVoucher(body){
   const lock = LockService.getScriptLock();
   lock.waitLock(15000);
   try{
-    const sh  = getDataSheet_();
-    const no  = body.no && String(body.no).trim() ? String(body.no).trim() : buildNo_();
+    const prefix = monthPrefix();
+    const sh = getMonthSheet_(prefix);
+    const map = getSubjectMap_();
     const now = new Date();
-    const items = body.items || [];
-    // 民國日期加 ' 前綴強制存為文字，避免 Sheet 誤判成西元 115 年
-    const roc = body.rocDate ? "'" + body.rocDate : '';
-    const subject = String(body.subject||'').trim(); // 一張單一個科目
-    const rows = items.map((it,i)=>([
-      no, i+1, body.date||'', roc,
-      it.subject||subject, it.memo||'', Number(it.amount)||0,
-      body.payee||'', body.applicant||'', Number(body.total)||0, now, ''
-    ]));
-    if(rows.length){
-      sh.getRange(sh.getLastRow()+1, 1, rows.length, HEADERS.length).setValues(rows);
+
+    // NO：沿用前端帶來的（同月且未被別人用走），否則取月內下一號
+    const maxNo = maxNo_(sh);
+    let seq = 0;
+    if(body.no){
+      const parts = String(body.no).trim().split('-');
+      if(parts.length === 2 && parts[0] === prefix) seq = parseInt(parts[1],10) || 0;
     }
-    return { ok:true, no:no, rows:rows.length };
+    if(seq <= maxNo) seq = maxNo + 1;
+
+    // 依科目分組（保持出現順序）：同科目併一列，不同科目各一列共用 NO
+    const items = body.items || [];
+    const order = [];
+    const groups = {};
+    items.forEach(it=>{
+      const s = String(it.subject||'').trim();
+      if(!groups[s]){ groups[s] = {memos:[], amounts:[]}; order.push(s); }
+      if(it.memo) groups[s].memos.push(String(it.memo));
+      groups[s].amounts.push(Number(it.amount)||0);
+    });
+    if(!order.length) return { ok:false, error:'沒有明細' };
+
+    const rocDate = String(body.rocDate||'').replace(/-/g,'/'); // 115/07/05
+    const rows = [];
+    const unmappedRows = [];
+    order.forEach((s,gi)=>{
+      const g = groups[s];
+      const acct = map[s] || '';
+      if(!acct) unmappedRows.push(gi);
+      const amount = g.amounts.length > 1 ? '=' + g.amounts.join('+') : (g.amounts[0]||0);
+      rows.push([
+        seq, '', "'" + rocDate, acct || s,
+        '',                       // F 會計名稱：寫入後補 MID 公式
+        g.memos.join('、'), amount,
+        body.payee||'', '', body.applicant||'', now
+      ]);
+    });
+
+    // 移除舊合計列 → 寫入資料 → 重加合計列
+    const sumRow = findSumRow_(sh);
+    if(sumRow > 0) sh.deleteRow(sumRow);
+    const start = Math.max(DATA_START_ROW, sh.getLastRow()+1);
+    sh.getRange(start, COL_B, rows.length, N_COLS).setValues(rows);
+    rows.forEach((r,i)=>{
+      const row = start + i;
+      if(unmappedRows.indexOf(i) >= 0){
+        sh.getRange(row,6).setValue(order[i]);                       // 未對照：F 直接放名稱
+        sh.getRange(row,COL_B,1,N_COLS).setBackground('#fff2a8');    // 整列標黃提醒補對照
+      }else{
+        sh.getRange(row,6).setFormula('=MID(E'+row+',5,LEN(E'+row+'))');
+      }
+    });
+    const lastData = start + rows.length - 1;
+    sh.getRange(lastData+1, 8).setFormula('=SUM(H'+DATA_START_ROW+':H'+lastData+')');
+    sh.getRange(lastData+1, 9).setValue('合計');
+    sh.getRange(lastData+1, COL_B, 1, N_COLS).setFontWeight('bold');
+
+    return { ok:true, no: prefix + '-' + String(seq).padStart(2,'0'), rows: rows.length,
+             unmapped: unmappedRows.length };
   }finally{
     lock.releaseLock();
   }
 }
 
-/* ---------- 會計月報：彙整當月申請單成「會計支出115MM」分頁 ---------- */
-function reportThisMonth(){ buildMonthlyReport_(monthPrefix()); }
-
-function reportPickMonth(){
-  const ui = SpreadsheetApp.getUi();
-  const res = ui.prompt('產生月報','輸入民國年月（5 碼，例 11507）：',ui.ButtonSet.OK_CANCEL);
-  if(res.getSelectedButton() !== ui.Button.OK) return;
-  const m = res.getResponseText().trim();
-  if(!/^\d{5}$/.test(m)){ ui.alert('格式錯誤，請輸入 5 碼民國年月，例 11507'); return; }
-  buildMonthlyReport_(m);
-}
-
-function buildMonthlyReport_(month){
-  const ss = SpreadsheetApp.getActive();
-  const data = getDataSheet_();
-  const map = getSubjectMap_();
-  const last = data.getLastRow();
-
-  // 同一張單（流水號）同一科目的多列明細，併成月報一列：
-  // 摘要用「、」串接，金額寫成 =a+b+c 公式（比照會計現行格式）
-  const groups = {};
-  const order = [];
-  if(last >= 2){
-    data.getRange(2,1,last-1,HEADERS.length).getValues().forEach(r=>{
-      const no = String(r[0]);
-      if(no.indexOf(month + '-') !== 0) return;
-      const seq = parseInt(no.split('-')[1],10) || 0;
-      const subject = String(r[4]||'').trim();
-      const key = seq + '|' + subject;
-      if(!groups[key]){
-        groups[key] = {
-          seq: seq, line: Number(r[1])||0,
-          rocDate: String(r[3]||'').replace(/-/g,'/'),
-          subject: subject, memos: [], amounts: [],
-          payee: r[7], note: r[11]||''
-        };
-        order.push(key);
-      }
-      const g = groups[key];
-      if(r[5]) g.memos.push(String(r[5]));
-      g.amounts.push(Number(r[6])||0);
-    });
-  }
-  const rows = order.map(k=>groups[k]);
-  rows.sort((a,b)=> a.seq - b.seq || a.line - b.line);
-
-  const name = REPORT_PREFIX + month;
-  let sh = ss.getSheetByName(name);
-  if(sh) sh.clear(); else sh = ss.insertSheet(name);
-
-  // 版面比照會計 xlsx：B2 起，B=NO C=月 D=日期 E=科目代號 F=會計名稱 G=摘要 H=合計 I=領款人 J=備註
-  sh.getRange(2,2,1,9).setValues([['NO','月','日期','科目代號','會計名稱','摘要','合計','領款人','備註']])
-    .setFontWeight('bold').setHorizontalAlignment('center');
-
-  const unmapped = [];
-  if(rows.length){
-    const values = rows.map(r=>{
-      const acct = map[r.subject] || '';
-      if(!acct) unmapped.push(r);
-      const memo = r.memos.join('、');
-      // 多筆明細 → =a+b+c 公式；單筆 → 直接填數字
-      const amount = r.amounts.length > 1 ? '=' + r.amounts.join('+') : (r.amounts[0]||0);
-      return [r.seq, '', r.rocDate, acct || r.subject, '', memo, amount, r.payee, r.note];
-    });
-    sh.getRange(3,2,values.length,9).setValues(values);
-    // 會計名稱：有對照的用 MID 公式切出名稱；未對照的整列標黃提醒
-    rows.forEach((r,i)=>{
-      const row = 3 + i;
-      if(map[r.subject]){
-        sh.getRange(row,6).setFormula('=MID(E'+row+',5,LEN(E'+row+'))');
-      }else{
-        sh.getRange(row,6).setValue(r.subject);
-        sh.getRange(row,2,1,9).setBackground('#fff2a8');
-      }
-    });
-  }
-
-  const sumRow = 3 + rows.length;
-  sh.getRange(sumRow,8).setFormula(rows.length ? '=SUM(H3:H'+(sumRow-1)+')' : '=0');
-  sh.getRange(sumRow,9).setValue('合計');
-  sh.getRange(sumRow,2,1,9).setFontWeight('bold');
-
-  sh.getRange(3,8,Math.max(rows.length,1)+1,1).setNumberFormat('#,##0');
-  sh.setColumnWidth(7,320);  // 摘要
-  sh.getRange(3,7,Math.max(rows.length,1),1).setWrap(true);
-  [2,3,4,6,8,9,10].forEach(c=> sh.autoResizeColumn(c));
-
-  const ui = SpreadsheetApp.getUi();
-  ui.alert('月報「'+name+'」已產生：'+rows.length+' 列' +
-    (unmapped.length ? '\n\n注意：有 '+unmapped.length+' 列科目未對照到會計科目（已標黃），請到「科目」分頁 B 欄補上對照後重新產生。' : ''));
-}
-
-/* ---------- 最近紀錄（可選，給日後查詢頁用） ---------- */
+/* ---------- 最近紀錄（本月，給日後查詢頁用） ---------- */
 function listRecent(limit){
-  const sh = getDataSheet_();
-  const last = sh.getLastRow();
-  if(last < 2) return [];
-  const start = Math.max(2, last - limit + 1);
-  const values = sh.getRange(start,1,last-start+1,HEADERS.length).getValues();
+  const sh = SpreadsheetApp.getActive().getSheetByName(MONTH_PREFIX + monthPrefix());
+  if(!sh) return [];
+  const sumRow = findSumRow_(sh);
+  const lastData = (sumRow > 0 ? sumRow - 1 : sh.getLastRow());
+  if(lastData < DATA_START_ROW) return [];
+  const start = Math.max(DATA_START_ROW, lastData - limit + 1);
+  const values = sh.getRange(start, COL_B, lastData-start+1, N_COLS).getValues();
   return values.map(r=>{
-    const o={}; HEADERS.forEach((h,i)=> o[h]=r[i]); return o;
+    const o={}; HEADER.forEach((h,i)=> o[h]=r[i]); return o;
   });
 }
 
 /* ---------- 工具 ---------- */
-function getDataSheet_(){
-  const ss = SpreadsheetApp.getActive();
-  let sh = ss.getSheetByName(SHEET_DATA);
-  if(!sh){
-    sh = ss.insertSheet(SHEET_DATA);
-    sh.getRange(1,1,1,HEADERS.length).setValues([HEADERS]).setFontWeight('bold');
-    sh.setFrozenRows(1);
-    sh.getRange('D2:D').setNumberFormat('@'); // 民國日期欄固定為文字格式
-  }
-  return sh;
-}
 function json(obj){
   return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
