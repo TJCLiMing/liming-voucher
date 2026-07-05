@@ -296,7 +296,15 @@ document.getElementById("items").addEventListener("input",e=>{
   let v = el.value;
   if(k==="amount") v = v.replace(/[^\d]/g,"");
   state.items[+i][k] = v;
-  if(k==="amount") renderAll(); else renderSheet();   // 金額變動要重畫輸入框（千分位）
+  renderSheet();   // 輸入中只更新預覽與合計，不重畫輸入框（避免打字被打斷）
+});
+// 金額欄離開時才補千分位
+document.getElementById("items").addEventListener("focusout",e=>{
+  const el=e.target;
+  if(el.dataset && el.dataset.k==="amount" && el.dataset.i!=null){
+    const v = state.items[+el.dataset.i].amount;
+    el.value = v!=="" ? Number(num(v)).toLocaleString("en-US") : "";
+  }
 });
 document.getElementById("items").addEventListener("click",e=>{
   const d=e.target.dataset.del;
