@@ -1,0 +1,8 @@
+# 會計 Excel 原始檔不上傳
+*.xlsx
+*.xls
+
+# 系統雜項
+Thumbs.db
+desktop.ini
+.DS_Store
