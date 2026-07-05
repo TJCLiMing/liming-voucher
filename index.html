@@ -89,19 +89,21 @@
   .totalrow .memo{font-weight:400;text-align:left;color:#333}
   .paste{border:1px solid var(--paper-line);border-top:none;height:34mm;position:relative;font-size:10pt}
   .paste span{position:absolute;top:2mm;left:50%;transform:translateX(-50%);color:#555}
-  .signs{display:flex;justify-content:space-between;font-size:11pt;margin-top:4mm;padding:0 1mm}
+  .signs{display:flex;font-size:11pt;margin-top:6mm;padding:0 1mm}
+  .signs span{flex:1}
   .note{font-size:9pt;color:#555;margin-top:2mm;line-height:1.4}
 
   .toolbar{position:sticky;top:0;display:flex;gap:8px;justify-content:flex-end;margin-bottom:14px}
   @media (max-width:900px){.toolbar{justify-content:center}}
 
   @media print{
-    @page{size:A4 portrait;margin:12mm}
+    /* margin:0 讓瀏覽器頁首頁尾（標題/網址/頁碼）沒有空間可印，留白改由 .sheet 自己撐 */
+    @page{size:A4 portrait;margin:0}
     body{background:#fff}
     .editor,.toolbar,.no-print{display:none!important}
     .app{display:block}
     .preview{padding:0;display:block}
-    .sheet{width:auto;box-shadow:none;padding:0;min-height:0}
+    .sheet{width:auto;box-shadow:none;padding:12mm 14mm;min-height:0}
   }
 </style>
 </head>
