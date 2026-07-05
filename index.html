@@ -54,6 +54,7 @@
   .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
   .btn.primary:hover{filter:brightness(1.08)}
   .btn.block{width:100%;justify-content:center}
+  .btn.linkbtn{display:flex;align-items:center;justify-content:center;text-decoration:none;color:var(--ink);font-size:13px;padding:9px 6px}
   .actions{display:grid;gap:10px;margin-top:20px}
   .actions .hint{margin:0;font-size:11px;color:var(--muted);line-height:1.5}
   .total-box{display:flex;align-items:baseline;justify-content:space-between;padding:12px 14px;background:#f6f7f9;border-radius:10px;margin-top:6px}
@@ -156,6 +157,11 @@
         <button class="btn" id="showList">歷史資料</button>
       </div>
       <p class="hint">「存檔並列印」會自動先存進 Google Sheet 取得單號再印；要重印以前的單，請按「歷史資料」。</p>
+      <p class="hint" style="margin-top:8px;font-weight:500">其他表單：</p>
+      <div class="row2">
+        <a class="btn linkbtn" href="proof.html">支出證明單</a>
+        <a class="btn linkbtn" href="food.html">伙食費支出證明單</a>
+      </div>
     </div>
   </div>
 
