@@ -26,8 +26,8 @@
 ```
 liming-voucher/
 ├── index.html   # 主表單：付款申請單（填單 + A4 預覽 + 列印 + 歷史資料清單）
-├── proof.html   # 輔助表單：支出證明單（無單據支出用，單純存檔+列印）
-├── food.html    # 輔助表單：伙食費支出證明單（單純存檔+列印）
+├── proof.html   # 輔助表單：支出證明單（無單據支出用；存檔+列印+歷史資料）
+├── food.html    # 輔助表單：伙食費支出證明單（存檔+列印+歷史資料）
 ├── Code.gs      # GAS 後端：JSON API（科目/流水號/存檔/查詢/輔助表單），需手動貼進 Apps Script
 ├── .nojekyll    # 停用 GitHub Pages 的 Jekyll 建置
 └── README.md
@@ -46,7 +46,13 @@ liming-voucher/
 - **列印自動存檔**：主按鈕「存檔並列印」未存檔或有改動就先存再印；空白單直接印。
   「只存檔」給不印紙本的情況；「歷史資料」查詢/重印。
 - **重印不重複存檔**：從「歷史資料」載入後 `dirty=false`，直接列印不再寫入；
-  修改內容後列印則以新 NO 另存一筆。
+  修改內容後列印則以新 NO（或新的一列）另存一筆。
+- **歷史資料三頁都有**：付款申請單從當月分頁依 NO 分組載回；
+  兩張證明單靠存檔時多存的「原始資料」欄（完整 JSON）無損還原表單。
+- **列印無頁首頁尾**：`@page{margin:0}` 讓瀏覽器沒空間印標題/網址/頁碼，
+  紙張留白由 `.sheet` 的 padding 提供（三頁同做法）。
+- **導覽**：三頁左上角膠囊分頁籤互相切換（當前頁深色）；主頁按鈕區另有
+  兩顆連結按鈕直達證明單。
 - **簽名**：前端只填「申請人」（必填），Sheet 的「領款人」欄記申請人姓名；
   A4 列印的領款人簽名／申請人一律留空給實體簽名。
 - **科目**：前端下拉用自訂名稱（伙食費、雜費…），「科目」分頁 B 欄放會計科目對照
@@ -71,6 +77,8 @@ liming-voucher/
 - **「支出證明單」「伙食費支出證明單」**（輔助表單流水帳，存檔自動建立）：
   一張表單一列，明細序列化成文字（如 `白米×2包=1500；蔬菜×一批=2935`），
   無特定格式要求，純留存紀錄；正式文件以列印的紙本（含簽名）為準。
+  最後一欄「**原始資料**」存完整 JSON——歷史資料還原表單就是靠它，**請勿刪除或改動**。
+  標題列每次存檔會重寫（冪等），未來加欄位舊分頁會自動補標題。
 
 ## 後端 API（Code.gs）
 
@@ -82,6 +90,8 @@ Base URL：GAS Web App 的 `/exec` 網址（已填在 `index.html` 的 `GAS_API_
 | GET `?action=subjects` | — | 科目名稱陣列（給下拉） |
 | GET `?action=nextno` | — | 建議單號 `{"no":"11507-03"}` |
 | GET `?action=list` | `limit`(預設20)、`month`(選填,如11506) | 該月資料列陣列（HEADER 為 key） |
+| GET `?action=prooflist` | `limit`(預設50) | 支出證明單流水帳（含原始資料 JSON，給歷史還原） |
+| GET `?action=foodlist` | `limit`(預設50) | 伙食費支出證明單流水帳（含原始資料 JSON） |
 | POST `action:"save"` | body 見下 | 付款申請單存檔 |
 | POST `action:"proof"` | rocDate/subject/reason/why/payee/items/total | 支出證明單存檔（一單一列流水帳） |
 | POST `action:"food"` | rocDate/reason/from/to/payee/people/tables/meals/buys/receipts/total | 伙食費支出證明單存檔（一單一列流水帳） |
@@ -180,10 +190,18 @@ curl -sL "<EXEC_URL>?action=subjects"   # 應回科目陣列
   - `openList()/loadVoucher()`＝歷史資料清單與載入重印（`LIST_CACHE` 依 NO 分組）
   - 金額輸入「輸入中不重畫、失焦才補千分位」——別改回每鍵 render，會掉焦點
   - 明細欄位樣式選擇器是 `.item .grid input/select`（不在 `.field` 底下）
+- **proof.html / food.html**（各自獨立單檔，結構仿 index）：
+  - `openList()/loadRecord()`＝歷史資料：抓 `prooflist`/`foodlist`，
+    解析每列的「原始資料」JSON 還原 state（`rocToIso()` 把民國轉回 date input 格式）
+  - proof：數量×單價自動算總價（可手改）；`cnDigits()` 合計中文位數（萬仟佰拾元）
+  - food：`twoCol()` 把清單拆左右兩欄呈現；用餐情形合計列左右各自加總人數與金額
 - **Code.gs**：
   - `saveVoucher()`：科目分組 → 寫入月分頁 → 補 MID 公式與合計列；全程 LockService
   - `getMonthSheet_()` 自動建月分頁含格式；`findSumRow_()` 以 I 欄=「合計」定位
   - `maxNo_()` 取月內最大 NO；前端帶來的 no 若 ≤ maxNo 自動遞補
+  - `saveProof()/saveFood()` → `appendSimple_()`（標題列冪等重寫）；
+    `listSimple_()` 回傳輔助表單流水帳（含原始資料欄）
+  - 所有民國日期／期間欄寫入都帶 `'` 前綴強制文字，否則 Sheet 會誤判成西元 115 年
 
 ## 待辦 / 可能的後續
 
