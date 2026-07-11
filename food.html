@@ -88,6 +88,7 @@
     .editor,.toolbar,.no-print{display:none!important}
     .app{display:block}
     .preview{padding:0;display:block}
+    .paperwrap{width:auto!important}  /* 左右邊界對稱（各 16mm） */
     .sheet{width:auto;box-shadow:none;padding:12mm 16mm;min-height:0}
   }
 </style>
@@ -170,7 +171,7 @@
   </div>
 
   <div class="preview">
-    <div style="width:186mm;max-width:100%">
+    <div class="paperwrap" style="width:186mm;max-width:100%">
       <div class="toolbar no-print">
         <button class="btn small" id="print2">列印 / 匯出 PDF</button>
       </div>

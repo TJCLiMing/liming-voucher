@@ -108,7 +108,11 @@
     .editor,.toolbar,.no-print{display:none!important}
     .app{display:block}
     .preview{padding:0;display:block}
-    .sheet{width:auto;box-shadow:none;padding:12mm 14mm;min-height:0}
+    .paperwrap{width:auto!important}   /* 解除 186mm 預覽寬度，左右邊界對稱（各 14mm） */
+    /* 撐滿整頁高，上下邊界對稱（各 12mm）；單據黏貼處自動長高吃掉剩餘空間 */
+    .sheet{width:auto;box-shadow:none;padding:12mm 14mm 15mm;box-sizing:border-box;
+      height:297mm;display:flex;flex-direction:column;overflow:hidden}
+    .sheet .paste{flex:1}
   }
 </style>
 </head>
@@ -168,7 +172,7 @@
 
   <!-- ============ PREVIEW ============ -->
   <div class="preview">
-    <div style="width:186mm;max-width:100%">
+    <div class="paperwrap" style="width:186mm;max-width:100%">
       <div class="toolbar no-print">
         <button class="btn small" id="print2">列印 / 匯出 PDF</button>
       </div>
