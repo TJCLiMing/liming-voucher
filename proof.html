@@ -343,7 +343,10 @@ async function loadSubjects(){
   try{
     const res=await fetch(GAS_API_URL+"?action=subjects").then(r=>r.json());
     if(Array.isArray(res)&&res.length){
-      document.getElementById("subjectList").innerHTML=res.map(s=>`<option value="${escAttr(s)}">`).join("");
+      document.getElementById("subjectList").innerHTML=res.map(s=>{
+        const o = typeof s==="string" ? {name:s, desc:""} : s;
+        return `<option value="${escAttr(o.name)}">${o.desc?escAttr(o.desc):""}</option>`;
+      }).join("");
     }
   }catch(e){}
 }

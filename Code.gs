@@ -21,8 +21,8 @@
 
 const SHEET_SUBJECT = '科目';
 const MONTH_PREFIX  = '會計支出';
-// 月分頁欄位（從 B 欄起）：B=NO C=月 D=日期 E=科目代號 F=會計名稱 G=摘要 H=合計 I=領款人 J=備註 K=建立時間
-const HEADER = ['NO','月','日期','科目代號','會計名稱','摘要','合計','領款人','備註','建立時間'];
+// 月分頁欄位（從 B 欄起）：B=NO C=月 D=日期 E=科目代號 F=會計名稱 G=摘要 H=合計 I=領款人 J=備註 K=建立時間 L=原始資料
+const HEADER = ['NO','月','日期','科目代號','會計名稱','摘要','合計','領款人','備註','建立時間','原始資料'];
 const DATA_START_ROW = 3;   // 比照會計 xlsx：標題在第 2 列、B 欄起
 const COL_B = 2, N_COLS = HEADER.length;
 
@@ -37,7 +37,7 @@ function onOpen(){
 function doGet(e){
   const action = (e.parameter.action || '').toLowerCase();
   if(action === 'subjects') return json(getSubjects());
-  if(action === 'nextno')   return json({ no: peekNextNo() });
+  if(action === 'nextno')   return json({ no: '' }); // 流水號暫停（手工/電子並行），前端也已不呼叫
   if(action === 'list')     return json(listRecent(Number(e.parameter.limit) || 20, e.parameter.month));
   if(action === 'prooflist') return json(listSimple_('支出證明單', Number(e.parameter.limit) || 50));
   if(action === 'foodlist')  return json(listSimple_('伙食費支出證明單', Number(e.parameter.limit) || 50));
@@ -56,14 +56,17 @@ function doPost(e){
   }
 }
 
-/* ---------- 科目 ---------- */
+/* ---------- 科目 ----------
+ * 「科目」分頁三欄：A 科目名稱、B 會計科目（代號+名稱）、C 說明
+ * subjects API 回傳 [{name, desc}]，前端下拉顯示「科目（說明）」、值只有科目名 */
 function getSubjects(){
   const sh = SpreadsheetApp.getActive().getSheetByName(SHEET_SUBJECT);
   if(!sh) return [];
   const last = sh.getLastRow();
   if(last < 2) return [];
-  return sh.getRange(2,1,last-1,1).getValues()
-           .map(r => String(r[0]).trim()).filter(Boolean);
+  return sh.getRange(2,1,last-1,3).getValues()
+           .map(r => ({ name: String(r[0]).trim(), desc: String(r[2]||'').trim() }))
+           .filter(s => s.name);
 }
 
 /* 科目名稱 → 會計科目（代號+名稱，如 6331伙食費） */
@@ -89,6 +92,7 @@ function initSubjectSheet(){
     return;
   }
   if(!sh) sh = ss.insertSheet(SHEET_SUBJECT);
+  sh.getRange(1,3).setValue('說明');
   const rows = [
     ['科目','會計科目'],
     ['伙食費','6331伙食費'],
@@ -123,14 +127,15 @@ function getMonthSheet_(prefix){
   let sh = ss.getSheetByName(name);
   if(!sh){
     sh = ss.insertSheet(name);
-    sh.getRange(2,COL_B,1,N_COLS).setValues([HEADER])
-      .setFontWeight('bold').setHorizontalAlignment('center');
     sh.setFrozenRows(2);
     sh.getRange('D:D').setNumberFormat('@');      // 日期存民國文字 115/07/05
     sh.getRange('H:H').setNumberFormat('#,##0');  // 金額千分位
     sh.setColumnWidth(7,320);                     // 摘要
     sh.getRange('G:G').setWrap(true);
   }
+  // 標題列每次重寫（冪等），加欄位時舊分頁會自動補標題
+  sh.getRange(2,COL_B,1,N_COLS).setValues([HEADER])
+    .setFontWeight('bold').setHorizontalAlignment('center');
   return sh;
 }
 
@@ -175,40 +180,26 @@ function saveVoucher(body){
     const map = getSubjectMap_();
     const now = new Date();
 
-    // NO：沿用前端帶來的（同月且未被別人用走），否則取月內下一號
-    const maxNo = maxNo_(sh);
-    let seq = 0;
-    if(body.no){
-      const parts = String(body.no).trim().split('-');
-      if(parts.length === 2 && parts[0] === prefix) seq = parseInt(parts[1],10) || 0;
-    }
-    if(seq <= maxNo) seq = maxNo + 1;
+    // 流水號暫停自動編號：NO 照前端傳來的存（通常空白，手寫編號用）
+    const noStr = String(body.no||'').trim();
 
-    // 依科目分組（保持出現順序）：同科目併一列，不同科目各一列共用 NO
+    // 一筆明細一列，不合併同科目（第一列多存「原始資料」JSON 供歷史還原）
     const items = body.items || [];
-    const order = [];
-    const groups = {};
-    items.forEach(it=>{
-      const s = String(it.subject||'').trim();
-      if(!groups[s]){ groups[s] = {memos:[], amounts:[]}; order.push(s); }
-      if(it.memo) groups[s].memos.push(String(it.memo));
-      groups[s].amounts.push(Number(it.amount)||0);
-    });
-    if(!order.length) return { ok:false, error:'沒有明細' };
+    if(!items.length) return { ok:false, error:'沒有明細' };
 
     const rocDate = String(body.rocDate||'').replace(/-/g,'/'); // 115/07/05
     const rows = [];
     const unmappedRows = [];
-    order.forEach((s,gi)=>{
-      const g = groups[s];
+    items.forEach((it,i)=>{
+      const s = String(it.subject||'').trim();
       const acct = map[s] || '';
-      if(!acct) unmappedRows.push(gi);
-      const amount = g.amounts.length > 1 ? '=' + g.amounts.join('+') : (g.amounts[0]||0);
+      if(!acct) unmappedRows.push(i);
       rows.push([
-        seq, '', "'" + rocDate, acct || s,
+        noStr, '', "'" + rocDate, acct || s,
         '',                       // F 會計名稱：寫入後補 MID 公式
-        g.memos.join('、'), amount,
-        body.applicant||'', '', now  // 領款人欄記申請人姓名
+        String(it.memo||''), Number(it.amount)||0,
+        body.applicant||'', '', now,  // 領款人欄記申請人姓名
+        i===0 ? JSON.stringify(body) : ''
       ]);
     });
 
@@ -220,8 +211,8 @@ function saveVoucher(body){
     rows.forEach((r,i)=>{
       const row = start + i;
       if(unmappedRows.indexOf(i) >= 0){
-        sh.getRange(row,6).setValue(order[i]);                       // 未對照：F 直接放名稱
-        sh.getRange(row,COL_B,1,N_COLS).setBackground('#fff2a8');    // 整列標黃提醒補對照
+        sh.getRange(row,6).setValue(String(items[i].subject||'').trim()); // 未對照：F 直接放名稱
+        sh.getRange(row,COL_B,1,N_COLS).setBackground('#fff2a8');         // 整列標黃提醒補對照
       }else{
         sh.getRange(row,6).setFormula('=MID(E'+row+',5,LEN(E'+row+'))');
       }
@@ -231,7 +222,7 @@ function saveVoucher(body){
     sh.getRange(lastData+1, 9).setValue('合計');
     sh.getRange(lastData+1, COL_B, 1, N_COLS).setFontWeight('bold');
 
-    return { ok:true, no: prefix + '-' + String(seq).padStart(2,'0'), rows: rows.length,
+    return { ok:true, no: noStr, rows: rows.length,
              unmapped: unmappedRows.length };
   }finally{
     lock.releaseLock();

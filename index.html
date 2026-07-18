@@ -130,7 +130,7 @@
     <div class="row2">
       <div class="field">
         <label>流水號 No</label>
-        <input id="no" placeholder="存檔後自動產生（如 11507-01）">
+        <input id="no" placeholder="尚未開放自動編號">
       </div>
       <div class="field">
         <label>日期</label>
@@ -204,7 +204,8 @@ const COLS = [
   {label:"十",    place:10},
   {label:"元",    place:1},
 ];
-const MOCK_SUBJECTS = ["伙食費","旅運費","清掃薪資","文具費","郵電費","水電費","修繕費","誌謝金","餐費","印刷費","雜費"];
+const MOCK_SUBJECTS = ["伙食費","旅運費","清掃薪資","文具費","郵電費","水電費","修繕費","誌謝金","餐費","印刷費","雜費"]
+  .map(n=>({name:n, desc:""}));
 
 let SUBJECTS = MOCK_SUBJECTS.slice();
 const state = {
@@ -241,9 +242,10 @@ function toast(msg,bad){
 }
 
 /* ---------- editor render ---------- */
+/* 下拉顯示「科目（說明）」，值（=存檔與 PDF）只有科目名 */
 function subjectOptions(sel){
   return `<option value="">— 選科目 —</option>` +
-    SUBJECTS.map(s=>`<option value="${s}" ${s===sel?"selected":""}>${s}</option>`).join("");
+    SUBJECTS.map(s=>`<option value="${escAttr(s.name)}" ${s.name===sel?"selected":""}>${s.name}${s.desc?`（${s.desc}）`:""}</option>`).join("");
 }
 function renderItems(){
   const box=document.getElementById("items");
@@ -358,8 +360,10 @@ async function printSheet(){
   window.print();
 }
 
-/* ---------- 已存單據清單（查詢 / 重印） ---------- */
-let LIST_CACHE = {};
+/* ---------- 歷史資料清單（查詢 / 重印） ----------
+ * 新資料：每張單第一列存有「原始資料」JSON，無損還原（科目/明細不合併）
+ * 舊資料（沒有原始資料欄）：退回用 NO 分組、會計名稱當科目的粗略還原 */
+let LIST_CACHE = [];
 async function openList(){
   const modal=document.getElementById("listModal");
   const box=document.getElementById("listBody");
@@ -369,40 +373,54 @@ async function openList(){
   try{
     const rows = await apiGet("list",{limit:300});
     if(!Array.isArray(rows)||!rows.length){ box.innerHTML="本月尚無資料"; return; }
-    const g={}, order=[];
-    rows.forEach(r=>{ const n=r["NO"]; if(g[n]==null){ g[n]=[]; order.push(n); } g[n].push(r); });
-    order.reverse(); // 新的在上面
-    LIST_CACHE = g;
+    const recs=[]; const legacy={}; const legacyOrder=[];
+    rows.forEach(r=>{
+      if(r["原始資料"]){
+        try{ recs.push({p:JSON.parse(r["原始資料"]), row:r}); return; }catch(e){}
+      }
+      const n=r["NO"];
+      if(n!==""&&n!=null){ if(!legacy[n]){ legacy[n]=[]; legacyOrder.push(n); } legacy[n].push(r); }
+    });
+    legacyOrder.forEach(n=>recs.push({legacyRows:legacy[n], row:legacy[n][0]}));
+    recs.sort((a,b)=>String(b.row["建立時間"]||"").localeCompare(String(a.row["建立時間"]||"")));
+    if(!recs.length){ box.innerHTML="本月尚無可載入的存檔"; return; }
+    LIST_CACHE=recs;
     box.innerHTML = `<table class="ltable">
-      <tr><th>NO</th><th>日期</th><th>科目</th><th style="text-align:right">合計</th><th>申請人</th></tr>` +
-      order.map(n=>{
-        const rs=g[n];
-        const t=rs.reduce((s,r)=>s+(Number(r["合計"])||0),0);
-        const subs=rs.map(r=>String(r["會計名稱"]||r["科目代號"]||"").trim()).filter(Boolean).join("、");
-        return `<tr class="lrow" data-no="${n}">
-          <td>${n}</td><td>${r0(rs)["日期"]||""}</td><td>${subs}</td>
-          <td style="text-align:right">$${t.toLocaleString("en-US")}</td><td>${r0(rs)["領款人"]||""}</td>
+      <tr><th>日期</th><th>科目</th><th style="text-align:right">合計</th><th>申請人</th></tr>` +
+      recs.map((rec,i)=>{
+        const p=rec.p;
+        const subs = p ? [...new Set((p.items||[]).map(it=>it.subject))].join("、")
+                       : rec.legacyRows.map(r=>String(r["會計名稱"]||r["科目代號"]||"").trim()).filter(Boolean).join("、");
+        const total = p ? (p.total||0) : rec.legacyRows.reduce((s,r)=>s+(Number(r["合計"])||0),0);
+        const who = p ? (p.applicant||"") : String(rec.legacyRows[0]["領款人"]||"");
+        return `<tr class="lrow" data-i="${i}">
+          <td>${rec.row["日期"]||""}</td><td>${subs}</td>
+          <td style="text-align:right">$${Number(total).toLocaleString("en-US")}</td><td>${who}</td>
         </tr>`;
       }).join("") + `</table>
-      <p style="color:var(--muted);font-size:12px;margin:10px 2px 0">點一筆載入左側表單即可重印。載入後直接列印不會重複存檔；若修改內容再列印，會以新單號另存一筆。</p>`;
+      <p style="color:var(--muted);font-size:12px;margin:10px 2px 0">點一筆載入左側表單即可重印。載入後直接列印不會重複存檔；若修改內容再列印，會另存一筆。</p>`;
   }catch(err){ box.innerHTML="載入失敗："+err.message; }
 }
-function r0(rs){ return rs[0]||{}; }
-function loadVoucher(n){
-  const rs=LIST_CACHE[n]; if(!rs||!rs.length) return;
-  const roc=String(rs[0]["日期"]||"").split("/"); // 115/07/05
-  let prefix="";
-  if(roc.length===3){
-    state.date=`${(+roc[0])+1911}-${String(roc[1]).padStart(2,"0")}-${String(roc[2]).padStart(2,"0")}`;
-    prefix=`${roc[0]}${String(roc[1]).padStart(2,"0")}`;
+function loadVoucher(i){
+  const rec=LIST_CACHE[i]; if(!rec) return;
+  if(rec.p){
+    const p=rec.p;
+    state.date = p.date || state.date;
+    state.no = p.no || "";
+    state.applicant = p.applicant || "";
+    state.items = (p.items||[]).map(it=>({subject:it.subject||"", memo:it.memo||"", amount:it.amount?String(it.amount):""}));
+  }else{
+    const rs=rec.legacyRows;
+    const roc=String(rs[0]["日期"]||"").split("/"); // 115/07/05
+    if(roc.length===3) state.date=`${(+roc[0])+1911}-${String(roc[1]).padStart(2,"0")}-${String(roc[2]).padStart(2,"0")}`;
+    state.no="";
+    state.applicant=String(rs[0]["領款人"]||"");
+    state.items=rs.map(r=>({
+      subject:String(r["會計名稱"]||r["科目代號"]||"").trim(),
+      memo:String(r["摘要"]||""),
+      amount:String(Number(r["合計"])||"")
+    }));
   }
-  state.no = prefix ? `${prefix}-${String(n).padStart(2,"0")}` : String(n);
-  state.applicant = String(rs[0]["領款人"]||"");
-  state.items = rs.map(r=>({
-    subject: String(r["會計名稱"]||r["科目代號"]||"").trim(),
-    memo: String(r["摘要"]||""),
-    amount: String(Number(r["合計"])||"")
-  }));
   if(!state.items.length) state.items=[blankItem()];
   document.getElementById("no").value = state.no;
   document.getElementById("date").value = state.date;
@@ -410,14 +428,14 @@ function loadVoucher(n){
   dirty = false; // 重印不重複存檔
   renderAll();
   document.getElementById("listModal").classList.remove("show");
-  toast("已載入 NO "+state.no+"，可直接列印");
+  toast("已載入，可直接列印");
 }
 document.getElementById("showList").onclick=openList;
 document.getElementById("closeList").onclick=()=>document.getElementById("listModal").classList.remove("show");
 document.getElementById("listModal").addEventListener("click",e=>{
   if(e.target.id==="listModal") e.target.classList.remove("show");
   const tr=e.target.closest("tr.lrow");
-  if(tr) loadVoucher(tr.dataset.no);
+  if(tr) loadVoucher(+tr.dataset.i);
 });
 
 /* ---------- API ---------- */
@@ -437,14 +455,11 @@ async function apiPost(payload){
 
 async function loadSubjects(){
   if(!GAS_API_URL) return;
-  try{ const res=await apiGet("subjects"); if(Array.isArray(res)&&res.length){ SUBJECTS=res; renderItems(); } }
+  try{ const res=await apiGet("subjects"); if(Array.isArray(res)&&res.length){
+    SUBJECTS=res.map(s=> typeof s==="string" ? {name:s, desc:""} : s); renderItems(); } }
   catch(err){ console.warn("科目載入失敗",err); }
 }
-async function suggestNo(){
-  if(!GAS_API_URL) return;
-  try{ const res=await apiGet("nextno"); if(res&&res.no){ state.no=res.no; document.getElementById("no").value=res.no; renderSheet(); } }
-  catch(err){ console.warn("流水號載入失敗",err); }
-}
+/* 流水號暫停：手工/電子並行期間不自動編號（保留欄位可手動輸入） */
 
 async function saveVoucher(){
   const items = state.items.filter(it=>it.subject||it.memo||num(it.amount)>0);
@@ -474,7 +489,7 @@ async function saveVoucher(){
     if(res&&res.ok){
       if(res.no){ state.no=res.no; document.getElementById("no").value=res.no; renderSheet(); }
       dirty = false;
-      toast("已存入 Google Sheet（No："+(res.no||"")+"）");
+      toast("已存入 Google Sheet");
       return true;
     }else{ toast("儲存失敗："+((res&&res.error)||"未知錯誤"),true); return false; }
   }catch(err){ toast("連線失敗："+err.message,true); return false; }
@@ -491,7 +506,6 @@ async function saveVoucher(){
     w.textContent="示範模式：科目為預設清單，存檔只會印在 Console。填入 GAS_API_URL 後即接上 Google Sheet。";
   }
   loadSubjects();
-  suggestNo();
 })();
 </script>
 </body>
